@@ -9,7 +9,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Go 1.24 via Docker (official image, Debian trixie)
     container:
       image: golang:1.24
 
@@ -31,7 +30,8 @@ jobs:
             unzip \
             wget \
             git \
-            ca-certificates
+            ca-certificates \
+            gradle
 
       - name: Install Android SDK
         run: |
@@ -59,10 +59,6 @@ jobs:
           go install golang.org/x/mobile/cmd/gomobile@latest
           export PATH="$(go env GOPATH)/bin:$PATH"
           gomobile init
-          gomobile version
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
 
       - name: Build native core
         run: |
@@ -70,7 +66,8 @@ jobs:
           ./scripts/build_native.sh
 
       - name: Build APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: |
+          gradle :app:assembleDebug --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
