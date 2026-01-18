@@ -1,4 +1,4 @@
-name: ✅ Финальная сборка Android
+name: 🚀 Сборка Android APK
 
 on: [workflow_dispatch]
 
@@ -9,66 +9,64 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # 1. СОЗДАЕМ ПРАВИЛЬНУЮ СТРУКТУРУ ДЛЯ GRADLE 9+
-      - name: 🏗️ Создаем совместимую структуру
+      # 1. ПРОСТОЕ СОЗДАНИЕ ПРАВИЛЬНОЙ СТРУКТУРЫ
+      - name: 🛠️ Создаем правильные файлы
         run: |
-          echo "=== СОЗДАЕМ СОВМЕСТИМУЮ СТРУКТУРУ ==="
+          echo "=== СОЗДАЕМ ПРАВИЛЬНЫЕ ФАЙЛЫ ==="
           
-          # 1. КОРНЕВОЙ build.gradle.kts - ТОЛЬКО плагины, БЕЗ репозиториев!
-          echo '// Этот файл должен быть ПУСТЫМ или содержать ТОЛЬКО плагины' > build.gradle.kts
-          echo 'plugins {' >> build.gradle.kts
+          # 1. Сохраняем старый файл если он содержит Android конфиг
+          if grep -q "android {" build.gradle.kts 2>/dev/null; then
+            echo "Сохраняю старый build.gradle.kts..."
+            cp build.gradle.kts /tmp/old_build.gradle.kts
+          fi
+          
+          # 2. КОРНЕВОЙ build.gradle.kts - ТОЛЬКО ПЛАГИНЫ
+          echo 'plugins {' > build.gradle.kts
           echo '    id("com.android.application") version "8.5.0" apply false' >> build.gradle.kts
           echo '    id("org.jetbrains.kotlin.android") version "1.9.20" apply false' >> build.gradle.kts
           echo '}' >> build.gradle.kts
           
-          # 2. app/build.gradle.kts - берем существующий или создаем минимальный
-          if [ -f "app/build.gradle.kts" ] && [ -s "app/build.gradle.kts" ]; then
-            echo "Используем существующий app/build.gradle.kts"
+          # 3. APP build.gradle.kts - используем старый или создаем минимальный
+          if [ -f "/tmp/old_build.gradle.kts" ]; then
+            echo "Использую старый Android конфиг для app/"
+            cp /tmp/old_build.gradle.kts app/build.gradle.kts
+          elif [ -f "app/build.gradle.kts" ] && [ -s "app/build.gradle.kts" ]; then
+            echo "app/build.gradle.kts уже существует"
           else
-            echo "Создаем app/build.gradle.kts..."
-            # Берем из корня если там Android конфиг
-            if grep -q "android {" build.gradle.kts.backup 2>/dev/null; then
-              cp build.gradle.kts.backup app/build.gradle.kts
-            elif grep -q "android {" build.gradle.kts 2>/dev/null; then
-              cp build.gradle.kts app/build.gradle.kts
-            else
-              # Минимальный конфиг
-              cat > app/build.gradle.kts << 'END'
-              plugins {
-                  id("com.android.application")
-                  id("org.jetbrains.kotlin.android")
-              }
-              
-              android {
-                  namespace = "com.example.v2rayadguard"
-                  compileSdk = 34
-                  
-                  defaultConfig {
-                      applicationId = "com.example.v2rayadguard"
-                      minSdk = 24
-                      targetSdk = 34
-                      versionCode = 1
-                      versionName = "1.0"
-                  }
-                  
-                  buildTypes {
-                      getByName("debug") {
-                          isMinifyEnabled = false
-                      }
-                  }
-              }
-              
-              dependencies {
-                  implementation("androidx.core:core-ktx:1.12.0")
-                  implementation("androidx.appcompat:appcompat:1.6.1")
-              }
-              END
-            fi
+            echo "Создаю минимальный app/build.gradle.kts..."
+            # Создаем простой файл без heredoc
+            echo 'plugins {' > app/build.gradle.kts
+            echo '    id("com.android.application")' >> app/build.gradle.kts
+            echo '    id("org.jetbrains.kotlin.android")' >> app/build.gradle.kts
+            echo '}' >> app/build.gradle.kts
+            echo '' >> app/build.gradle.kts
+            echo 'android {' >> app/build.gradle.kts
+            echo '    namespace = "com.example.v2rayadguard"' >> app/build.gradle.kts
+            echo '    compileSdk = 34' >> app/build.gradle.kts
+            echo '' >> app/build.gradle.kts
+            echo '    defaultConfig {' >> app/build.gradle.kts
+            echo '        applicationId = "com.example.v2rayadguard"' >> app/build.gradle.kts
+            echo '        minSdk = 24' >> app/build.gradle.kts
+            echo '        targetSdk = 34' >> app/build.gradle.kts
+            echo '        versionCode = 1' >> app/build.gradle.kts
+            echo '        versionName = "1.0"' >> app/build.gradle.kts
+            echo '    }' >> app/build.gradle.kts
+            echo '' >> app/build.gradle.kts
+            echo '    buildTypes {' >> app/build.gradle.kts
+            echo '        getByName("debug") {' >> app/build.gradle.kts
+            echo '            isMinifyEnabled = false' >> app/build.gradle.kts
+            echo '        }' >> app/build.gradle.kts
+            echo '    }' >> app/build.gradle.kts
+            echo '}' >> app/build.gradle.kts
+            echo '' >> app/build.gradle.kts
+            echo 'dependencies {' >> app/build.gradle.kts
+            echo '    implementation("androidx.core:core-ktx:1.12.0")' >> app/build.gradle.kts
+            echo '    implementation("androidx.appcompat:appcompat:1.6.1")' >> app/build.gradle.kts
+            echo '}' >> app/build.gradle.kts
           fi
           
-          # 3. settings.gradle.kts - ВСЕ репозитории ТОЛЬКО здесь!
-          echo '// ВСЕ репозитории должны быть ЗДЕСЬ для Gradle 9+' > settings.gradle.kts
-          echo 'pluginManagement {' >> settings.gradle.kts
+          # 4. SETTINGS.GRADLE.KTS - ВСЕ репозитории ЗДЕСЬ
+          echo 'pluginManagement {' > settings.gradle.kts
           echo '    repositories {' >> settings.gradle.kts
           echo '        google()' >> settings.gradle.kts
           echo '        mavenCentral()' >> settings.gradle.kts
@@ -86,88 +84,76 @@ jobs:
           echo '' >> settings.gradle.kts
           echo 'rootProject.name = "V2rayAdGuard"' >> settings.gradle.kts
           echo 'include(":app")' >> settings.gradle.kts
-          # Временно отключаем проблемные модули
+          # Временно закомментируем проблемные модули
           echo '// include(":core")' >> settings.gradle.kts
           echo '// include(":dns:kotlin")' >> settings.gradle.kts
           
-          echo "✅ Структура создана для Gradle 9+"
+          echo "✅ Файлы созданы"
           echo ""
-          echo "Проверка файлов:"
-          echo "1. Корневой build.gradle.kts (должен быть МАЛЕНЬКИЙ):"
-          cat build.gradle.kts
+          echo "Корневой build.gradle.kts (должен быть маленький):"
+          wc -l build.gradle.kts
           echo ""
-          echo "2. settings.gradle.kts (должен иметь ВСЕ репозитории):"
-          cat settings.gradle.kts
+          echo "app/build.gradle.kts (должен содержать android блок):"
+          grep -c "android {" app/build.gradle.kts || echo "Нет android блока"
       
-      # 2. Устанавливаем Java 17 (обязательно)
+      # 2. Установка Java
       - name: ☕ Установка Java 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-      
-      # 3. ОБНОВЛЯЕМ GRADLE WRAPPER до 8.5 (совместимый с Android)
-      - name: 🔄 Обновляем Gradle wrapper
         run: |
-          echo "=== ОБНОВЛЯЕМ GRADLE ДО 8.5 ==="
-          # Gradle 8.5 совместим с Android Gradle Plugin 8.5
+          sudo apt update
+          sudo apt install -y openjdk-17-jdk
+          echo "JAVA_HOME=$(readlink -f /usr/bin/java | sed 's:bin/java::')" >> $GITHUB_ENV
+      
+      # 3. СБОРКА
+      - name: 🏗️ Сборка APK
+        run: |
+          echo "=== ЗАПУСК СБОРКИ ==="
+          
+          # Обновляем Gradle wrapper до 8.5
           ./gradlew wrapper --gradle-version 8.5 --distribution-type bin
           chmod +x gradlew
           
-          echo "Проверяем версию:"
+          echo "Версия Gradle:"
           ./gradlew --version 2>&1 | head -5
-      
-      # 4. 🏗️ ФИНАЛЬНАЯ СБОРКА
-      - name: 🏗️ Сборка APK
-        run: |
-          echo "=== ЗАПУСК ФИНАЛЬНОЙ СБОРКИ ==="
-          
-          # Показываем структуру проектов
-          echo "1. Список проектов:"
-          ./gradlew projects --no-daemon 2>&1 | grep -A10 "Root project"
           
           echo ""
-          echo "2. Запуск сборки..."
+          echo "Проверка проектов:"
+          ./gradlew projects --no-daemon 2>&1 | grep -A5 "Root project"
           
-          # Собираем ТОЛЬКО app модуль
+          echo ""
+          echo "Запуск сборки..."
           if ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
             --console=plain \
-            --warning-mode=none 2>&1 | tee /tmp/final_build.log; then
-            echo "🎉 🎉 🎉 УСПЕШНАЯ СБОРКА!"
+            --warning-mode=none 2>&1 | tee /tmp/build_output.log; then
+            echo "✅ СБОРКА УСПЕШНА!"
+            
             echo ""
-            echo "3. Найденные APK файлы:"
-            APK_COUNT=$(find . -name "*.apk" -type f 2>/dev/null | wc -l)
-            if [ $APK_COUNT -gt 0 ]; then
-              echo "✅ Найдено $APK_COUNT APK файлов:"
-              find . -name "*.apk" -type f 2>/dev/null | while read f; do
-                echo "   📦 $f"
-                ls -lh "$f"
+            echo "Результаты:"
+            APKS=$(find . -name "*.apk" -type f 2>/dev/null)
+            if [ -n "$APKS" ]; then
+              echo "Найдены APK:"
+              echo "$APKS"
+              for apk in $APKS; do
+                echo "  📦 $apk ($(ls -lh "$apk" | awk '{print $5}'))"
               done
             else
-              echo "⚠️ APK не найдены. Проверяем директории:"
-              find . -type d -name "outputs" -o -name "apk" 2>/dev/null | head -5
+              echo "APK не найдены. Проверяем:"
+              ls -la app/build/outputs/apk/ 2>/dev/null || echo "Нет outputs/apk"
             fi
           else
-            echo "❌ СБОРКА ПРОВАЛИЛАСЬ"
+            echo "❌ ОШИБКА СБОРКИ"
             echo ""
-            echo "ОШИБКА (последние 30 строк):"
-            tail -30 /tmp/final_build.log
-            echo ""
-            echo "ДЛЯ ДИАГНОСТИКИ:"
-            echo "1. Проверь что в корневом build.gradle.kts НЕТ repositories"
-            echo "2. Проверь что ВСЕ repositories В settings.gradle.kts"
+            echo "Последние 20 строк ошибки:"
+            tail -20 /tmp/build_output.log
             exit 1
           fi
       
-      # 5. 📦 Загрузка результатов
+      # 4. Загрузка
       - name: 📦 Загрузка APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk-final
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            **/*.apk
-          if-no-files-found: error
+          name: android-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
