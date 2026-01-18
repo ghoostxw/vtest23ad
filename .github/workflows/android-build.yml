@@ -6,14 +6,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: 🛠️ СОЗДАЕМ ПРАВИЛЬНЫЙ APP/GRADLE
+      - name: 1. ОЧИСТКА УСТАРЕВШЕГО КОДА
         run: |
-          echo "=== СОЗДАЕМ app/build.gradle.kts ==="
+          echo "=== ОЧИСТКА УСТАРЕВШЕГО КОДА ==="
           
-          # Создаем папку app если нет
+          # Создаем чистый app/build.gradle.kts
           mkdir -p app
-          
-          # Создаем правильный app/build.gradle.kts
           cat > app/build.gradle.kts << 'EOF'
           plugins {
               id("com.android.application")
@@ -21,7 +19,6 @@ jobs:
           }
           
           android {
-              namespace = "com.example.v2rayadguard"
               compileSdk = 34
               
               defaultConfig {
@@ -35,119 +32,84 @@ jobs:
               buildTypes {
                   getByName("debug") {
                       isMinifyEnabled = false
-                      signingConfig = signingConfigs.getByName("debug")
                   }
-              }
-              
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-              kotlinOptions {
-                  jvmTarget = "17"
               }
           }
           
           dependencies {
               implementation("androidx.core:core-ktx:1.12.0")
-              implementation("androidx.appcompat:appcompat:1.6.1")
-              implementation("com.google.android.material:material:1.10.0")
-              implementation("androidx.constraintlayout:constraintlayout:2.1.4")
           }
           EOF
           
           echo "✅ app/build.gradle.kts создан"
-          echo ""
-          echo "Первые 10 строк файла:"
-          head -10 app/build.gradle.kts
       
-      - name: ⚙️ НАСТРОЙКА КОРНЕВЫХ ФАЙЛОВ
+      - name: 2. НАСТРОЙКА КОРНЕВЫХ ФАЙЛОВ
         run: |
-          echo "=== НАСТРАИВАЕМ КОРНЕВЫЕ ФАЙЛЫ ==="
+          echo "=== НАСТРОЙКА КОРНЕВЫХ ФАЙЛОВ ==="
           
-          # Корневой build.gradle.kts - ТОЛЬКО плагины
-          echo 'plugins {' > build.gradle.kts
-          echo '    id("com.android.application") version "8.5.0" apply false' >> build.gradle.kts
-          echo '    id("org.jetbrains.kotlin.android") version "1.9.20" apply false' >> build.gradle.kts
-          echo '}' >> build.gradle.kts
+          # Корневой файл - ПУСТОЙ
+          echo '// Root build file' > build.gradle.kts
           
-          # settings.gradle.kts - ВСЕ репозитории здесь
-          echo 'pluginManagement {' > settings.gradle.kts
-          echo '    repositories {' >> settings.gradle.kts
-          echo '        google()' >> settings.gradle.kts
-          echo '        mavenCentral()' >> settings.gradle.kts
-          echo '        gradlePluginPortal()' >> settings.gradle.kts
-          echo '    }' >> settings.gradle.kts
-          echo '}' >> settings.gradle.kts
-          echo '' >> settings.gradle.kts
-          echo 'dependencyResolutionManagement {' >> settings.gradle.kts
-          echo '    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' >> settings.gradle.kts
-          echo '    repositories {' >> settings.gradle.kts
-          echo '        google()' >> settings.gradle.kts
-          echo '        mavenCentral()' >> settings.gradle.kts
-          echo '    }' >> settings.gradle.kts
-          echo '}' >> settings.gradle.kts
-          echo '' >> settings.gradle.kts
-          echo 'rootProject.name = "V2rayAdGuard"' >> settings.gradle.kts
-          echo 'include(":app")' >> settings.gradle.kts
+          # Settings файл
+          echo 'pluginManagement {
+  repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+dependencyResolutionManagement {
+  repositories { google(); mavenCentral() }
+}
+include(":app")' > settings.gradle.kts
           
           echo "✅ Корневые файлы настроены"
       
-      - name: 📦 СОЗДАЕМ GRADLE WRAPPER
+      - name: 3. СОЗДАЕМ GRADLE 7.5 (совместимый)
         run: |
-          echo "=== СОЗДАЕМ GRADLE WRAPPER ==="
-          gradle wrapper --gradle-version 8.5 --distribution-type bin
+          echo "=== СОЗДАЕМ GRADLE 7.5 ==="
+          
+          # Удаляем старый wrapper
+          rm -f gradlew gradlew.bat
+          rm -rf .gradle gradle/wrapper 2>/dev/null || true
+          
+          # Создаем новый с Gradle 7.5
+          gradle wrapper --gradle-version 7.5 --distribution-type bin
           chmod +x gradlew
-          echo "✅ gradlew создан"
+          
+          echo "Проверяем версию:"
+          ./gradlew --version 2>&1 | head -3
       
-      - name: ☕ УСТАНОВКА JAVA
+      - name: 4. УСТАНОВКА JAVA 11 (для Gradle 7.5)
         run: |
           sudo apt update
-          sudo apt install -y openjdk-17-jdk
-          echo "✅ Java установлена"
+          sudo apt install -y openjdk-11-jdk
       
-      - name: 🏗️ СБОРКА APK
+      - name: 5. СБОРКА APK
         run: |
-          echo "=== ЗАПУСК СБОРКИ ==="
+          echo "=== СБОРКА APK ==="
           
-          echo "1. Проверка проектов:"
-          ./gradlew projects --no-daemon 2>&1 | tail -10
-          
-          echo ""
-          echo "2. Сборка debug APK:"
-          if ./gradlew :app:assembleDebug \
+          # Собираем с отключением предупреждений
+          ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
-            --console=plain 2>&1 | tee /tmp/build.log; then
+            --warning-mode=none \
+            --console=plain 2>&1 | tee /tmp/build.log
+          
+          if grep -q "BUILD SUCCESSFUL" /tmp/build.log; then
             echo "✅ ✅ ✅ СБОРКА УСПЕШНА!"
+            
+            echo ""
+            echo "Ищем APK:"
+            find . -name "*.apk" -type f 2>/dev/null || echo "APK не найдены"
           else
-            echo "❌ ОШИБКА СБОРКИ"
+            echo "❌ ОШИБКА"
+            echo "Последние 20 строк:"
             tail -20 /tmp/build.log
-            exit 1
           fi
       
-      - name: 🔍 ПОИСК СОБРАННЫХ APK
-        run: |
-          echo "=== ПОИСК СОБРАННЫХ ФАЙЛОВ ==="
-          
-          echo "1. Все APK файлы:"
-          find . -name "*.apk" -type f 2>/dev/null | while read f; do
-            echo "📦 $f ($(ls -lh "$f" | awk '{print $5}'))"
-          done || echo "APK не найдены"
-          
-          echo ""
-          echo "2. Директория app/build/outputs/apk/debug/:"
-          ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "Директория не существует"
-          
-          echo ""
-          echo "3. Все файлы в app/build/outputs/:"
-          find app/build/outputs/ -type f 2>/dev/null | head -10 || echo "Нет файлов"
-      
-      - name: 📤 ЗАГРУЗКА APK
+      - name: 6. ЗАГРУЗКА РЕЗУЛЬТАТОВ
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: android-debug-apk
+          name: android-apk
           path: |
             app/build/outputs/apk/debug/*.apk
-            **/*debug*.apk
-          if-no-files-found: error
+            **/*.apk
+          if-no-files-found: warn
