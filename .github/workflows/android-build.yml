@@ -1,4 +1,4 @@
-name: Android CI - HARD DEBUG
+name: Android CI - FINAL
 
 on:
   push:
@@ -9,33 +9,38 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      ANDROID_SDK_ROOT: /home/runner/Android/Sdk
-      JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install base tools
-        run: |
-          set -e
-          sudo apt-get update
-          sudo apt-get install -y \
-            openjdk-21-jdk-headless \
-            unzip \
-            wget \
-            git \
-            ca-certificates \
-            gradle
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
 
-      - name: HARD FILE SYSTEM DUMP
+      - name: Verify project structure
         run: |
           set -e
-          echo "===== PWD ====="
           pwd
-
-          echo "===== ROOT LS ====="
           ls -la
+          echo "===== settings.gradle.kts ====="
+          cat settings.gradle.kts
+          echo "===== app ====="
+          ls -la app
 
-          echo "===== FIND ALL settings
+      - name: List Gradle projects
+        run: |
+          set -e
+          ./gradlew projects
+
+      - name: Assemble Debug APK
+        run: |
+          set -e
+          ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
