@@ -19,14 +19,32 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      # Используем официальный экшен для настройки Gradle без wrapper
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build with Gradle
-        # Используем системный gradle, так как файла gradlew нет
-        # --warning-mode all поможет увидеть детали, если что-то не так
-        run: gradle assembleDebug --stacktrace
+        # Мы добавляем инициализацию репозиториев Google и MavenCentral прямо в команду,
+        # чтобы Gradle знал, где искать плагин 'com.android.application'
+        run: |
+          gradle assembleDebug \
+            -Pandroid.useAndroidX=true \
+            --init-script <(echo "
+              settingsEvaluated {
+                pluginManagement {
+                  repositories {
+                    google()
+                    mavenCentral()
+                    gradlePluginPortal()
+                  }
+                }
+                dependencyResolutionManagement {
+                  repositories {
+                    google()
+                    mavenCentral()
+                  }
+                }
+              }
+            ")
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
