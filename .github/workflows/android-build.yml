@@ -6,86 +6,72 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: 1. ОЧИСТКА УСТАРЕВШЕГО КОДА
+      - name: 1. Очистка устаревшего кода
         run: |
           echo "=== ОЧИСТКА УСТАРЕВШЕГО КОДА ==="
-          
-          # Создаем чистый app/build.gradle.kts
           mkdir -p app
           cat > app/build.gradle.kts << 'EOF'
-          plugins {
-              id("com.android.application")
-              id("org.jetbrains.kotlin.android")
-          }
-          
-          android {
-              compileSdk = 34
-              
-              defaultConfig {
-                  applicationId = "com.example.v2rayadguard"
-                  minSdk = 24
-                  targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
-              }
-              
-              buildTypes {
-                  getByName("debug") {
-                      isMinifyEnabled = false
-                  }
-              }
-          }
-          
-          dependencies {
-              implementation("androidx.core:core-ktx:1.12.0")
-          }
-          EOF
-          
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    compileSdk = 34
+    
+    defaultConfig {
+        applicationId = "com.example.v2rayadguard"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+    }
+    
+    buildTypes {
+        getByName("debug") {
+            isMinifyEnabled = false
+        }
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.12.0")
+}
+EOF
           echo "✅ app/build.gradle.kts создан"
       
-      - name: 2. НАСТРОЙКА КОРНЕВЫХ ФАЙЛОВ
+      - name: 2. Настройка корневых файлов
         run: |
           echo "=== НАСТРОЙКА КОРНЕВЫХ ФАЙЛОВ ==="
-          
-          # Корневой файл - ПУСТОЙ
           echo '// Root build file' > build.gradle.kts
-          
-          # Settings файл
-          echo 'pluginManagement {
+          cat > settings.gradle.kts << 'EOF'
+pluginManagement {
   repositories { google(); mavenCentral(); gradlePluginPortal() }
 }
 dependencyResolutionManagement {
   repositories { google(); mavenCentral() }
 }
-include(":app")' > settings.gradle.kts
-          
+include(":app")
+EOF
           echo "✅ Корневые файлы настроены"
       
-      - name: 3. СОЗДАЕМ GRADLE 7.5 (совместимый)
+      - name: 3. Создаем Gradle 7.5
         run: |
           echo "=== СОЗДАЕМ GRADLE 7.5 ==="
-          
-          # Удаляем старый wrapper
           rm -f gradlew gradlew.bat
           rm -rf .gradle gradle/wrapper 2>/dev/null || true
-          
-          # Создаем новый с Gradle 7.5
           gradle wrapper --gradle-version 7.5 --distribution-type bin
           chmod +x gradlew
-          
-          echo "Проверяем версию:"
           ./gradlew --version 2>&1 | head -3
       
-      - name: 4. УСТАНОВКА JAVA 11 (для Gradle 7.5)
+      - name: 4. Установка Java 11
         run: |
           sudo apt update
           sudo apt install -y openjdk-11-jdk
       
-      - name: 5. СБОРКА APK
+      - name: 5. Сборка APK
         run: |
           echo "=== СБОРКА APK ==="
-          
-          # Собираем с отключением предупреждений
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
@@ -94,22 +80,18 @@ include(":app")' > settings.gradle.kts
           
           if grep -q "BUILD SUCCESSFUL" /tmp/build.log; then
             echo "✅ ✅ ✅ СБОРКА УСПЕШНА!"
-            
             echo ""
             echo "Ищем APK:"
             find . -name "*.apk" -type f 2>/dev/null || echo "APK не найдены"
           else
             echo "❌ ОШИБКА"
-            echo "Последние 20 строк:"
             tail -20 /tmp/build.log
           fi
       
-      - name: 6. ЗАГРУЗКА РЕЗУЛЬТАТОВ
+      - name: 6. Загрузка результатов
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            **/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
