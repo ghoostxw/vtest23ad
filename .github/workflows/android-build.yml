@@ -7,6 +7,7 @@ on:
 
 env:
   JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+  ANDROID_SDK_ROOT: /home/runner/Android/Sdk
 
 jobs:
   build:
@@ -22,10 +23,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # ✅ ВАЖНО: Go 1.24
+      - name: Setup Go 1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+
       - name: Install Android commandline tools and SDK packages
         run: |
           set -e
-          ANDROID_SDK_ROOT="$HOME/Android/Sdk"
           mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools"
           cd $HOME
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
@@ -34,27 +40,27 @@ jobs:
             mv "${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools" "${ANDROID_SDK_ROOT}/cmdline-tools/latest"
           fi
           export PATH="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
-          yes | sdkmanager --sdk_root="${ANDROID_SDK_ROOT}" --install "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;25.2.9519653"
-          yes | sdkmanager --sdk_root="${ANDROID_SDK_ROOT}" --licenses || true
-
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.20'
+          yes | sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "ndk;25.2.9519653"
+          yes | sdkmanager --licenses
 
       - name: Install gomobile
         run: |
+          go version
           go install golang.org/x/mobile/cmd/gomobile@latest
-          export PATH=$(go env GOPATH)/bin:$PATH
-          gomobile init || true
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          gomobile init
 
       - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew || true
+        run: chmod +x ./gradlew
 
       - name: Build native core
         run: |
-          chmod +x ./scripts/build_native.sh || true
-          ./scripts/build_native.sh || true
+          chmod +x ./scripts/build_native.sh
+          ./scripts/build_native.sh
 
       - name: Build APK
         run: ./gradlew :app:assembleDebug --no-daemon
