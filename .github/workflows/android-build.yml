@@ -18,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install system deps
+      - name: Install system dependencies
         run: |
           set -e
           sudo apt-get update
@@ -33,26 +33,27 @@ jobs:
       - name: Install Android SDK
         run: |
           set -e
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          SDK="$ANDROID_SDK_ROOT"
+
+          mkdir -p "$SDK/cmdline-tools"
           cd "$HOME"
 
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
+          unzip -q cmdline-tools.zip -d "$SDK/cmdline-tools"
 
-          if [ -d "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" ]; then
-            mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          if [ -d "$SDK/cmdline-tools/cmdline-tools" ]; then
+            mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
           fi
 
-          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
 
-          yes | sdkmanager --install \
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
             "ndk;25.2.9519653"
 
-          yes | sdkmanager --licenses
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
 
       - name: Show Gradle configuration
         run: |
