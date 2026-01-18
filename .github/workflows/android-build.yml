@@ -1,127 +1,35 @@
-name: 🚀 Сборка Android APK
+name: Android CI - Build APK
 
-on: [workflow_dispatch]
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - uses: actions/checkout@v4
-      
-      # 1. СОЗДАЕМ ПРАВИЛЬНЫЕ ФАЙЛЫ
-      - name: 🛠️ Настройка проекта
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build with Gradle
         run: |
-          echo "=== НАСТРАИВАЕМ ПРОЕКТ ==="
-          
-          # Проверяем что есть
-          echo "Текущие файлы:"
-          ls -la *.gradle* *.kts 2>/dev/null || echo "Нет Gradle файлов"
-          
-          # Если в корне есть Android конфиг - копируем в app
-          if grep -q "android {" build.gradle.kts 2>/dev/null; then
-            echo "Копирую Android конфиг в app/"
-            mkdir -p app
-            cp build.gradle.kts app/build.gradle.kts
-          fi
-          
-          # Создаем корневой файл (ТОЛЬКО плагины)
-          echo 'plugins {' > build.gradle.kts
-          echo '    id("com.android.application") version "8.5.0" apply false' >> build.gradle.kts
-          echo '    id("org.jetbrains.kotlin.android") version "1.9.20" apply false' >> build.gradle.kts
-          echo '}' >> build.gradle.kts
-          
-          # Создаем settings.gradle.kts
-          echo 'pluginManagement {' > settings.gradle.kts
-          echo '    repositories {' >> settings.gradle.kts
-          echo '        google()' >> settings.gradle.kts
-          echo '        mavenCentral()' >> settings.gradle.kts
-          echo '        gradlePluginPortal()' >> settings.gradle.kts
-          echo '    }' >> settings.gradle.kts
-          echo '}' >> settings.gradle.kts
-          echo '' >> settings.gradle.kts
-          echo 'dependencyResolutionManagement {' >> settings.gradle.kts
-          echo '    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' >> settings.gradle.kts
-          echo '    repositories {' >> settings.gradle.kts
-          echo '        google()' >> settings.gradle.kts
-          echo '        mavenCentral()' >> settings.gradle.kts
-          echo '    }' >> settings.gradle.kts
-          echo '}' >> settings.gradle.kts
-          echo '' >> settings.gradle.kts
-          echo 'rootProject.name = "AndroidApp"' >> settings.gradle.kts
-          echo 'include(":app")' >> settings.gradle.kts
-          
-          echo "✅ Файлы настроены"
-      
-      # 2. СОЗДАЕМ GRADLE WRAPPER
-      - name: 📦 Создаем gradlew
-        run: |
-          echo "=== СОЗДАЕМ GRADLE WRAPPER ==="
-          
-          # Удаляем старый если есть
-          rm -f gradlew gradlew.bat
-          rm -rf gradle/wrapper 2>/dev/null || true
-          
-          # Создаем новый wrapper
-          gradle wrapper --gradle-version 8.5 --distribution-type bin
-          
-          echo "Проверяем:"
-          ls -la gradlew
-          chmod +x gradlew
-          
-          echo "Версия Gradle:"
-          ./gradlew --version 2>&1 | head -5
-      
-      # 3. УСТАНОВКА JAVA
-      - name: ☕ Установка Java
-        run: |
-          sudo apt update
-          sudo apt install -y openjdk-17-jdk
-      
-      # 4. СБОРКА
-      - name: 🏗️ Сборка APK
-        run: |
-          echo "=== ЗАПУСК СБОРКИ ==="
-          
-          echo "1. Проверка структуры:"
-          ./gradlew projects --no-daemon 2>&1 | tail -20
-          
-          echo ""
-          echo "2. Сборка app модуля:"
-          ./gradlew :app:assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            --console=plain 2>&1 | tee /tmp/build.log
-          
-          # Проверяем результат
-          if [ $? -eq 0 ]; then
-            echo "✅ ✅ ✅ СБОРКА УСПЕШНА!"
-            
-            echo ""
-            echo "3. Ищем APK:"
-            find . -name "*.apk" -type f 2>/dev/null | while read f; do
-              echo "📦 Найден: $f"
-              ls -lh "$f"
-            done || echo "APK не найдены"
-            
-            echo ""
-            echo "4. Проверяем выходную директорию:"
-            ls -la app/build/outputs/apk/ 2>/dev/null || echo "Нет outputs/apk"
-          else
-            echo "❌ ОШИБКА СБОРКИ"
-            echo ""
-            echo "Последние 30 строк лога:"
-            tail -30 /tmp/build.log
-            exit 1
-          fi
-      
-      # 5. ЗАГРУЗКА
-      - name: 📤 Загрузка результатов
-        if: success()
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            **/*.apk
-          if-no-files-found: warn
+          name: debug-apks
+          path: '**/build/outputs/apk/debug/*.apk'
+          if-no-files-found: error
