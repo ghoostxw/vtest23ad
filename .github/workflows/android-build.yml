@@ -55,7 +55,7 @@ jobs:
 
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
 
-      - name: Show Gradle configuration
+      - name: Show Gradle info
         run: |
           echo "===== ROOT FILES ====="
           ls -la
@@ -64,16 +64,16 @@ jobs:
           if [ -f settings.gradle.kts ]; then cat settings.gradle.kts; fi
           if [ -f settings.gradle ]; then cat settings.gradle; fi
 
-          echo "===== GRADLE PROJECTS ====="
-          gradle projects
+          echo "===== ALL TASKS ====="
+          gradle tasks --all
 
-      - name: Build ALL debug APKs
+      - name: Build project (all modules)
         run: |
-          gradle assembleDebug --no-daemon
+          gradle build --no-daemon
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: debug-apks
           path: |
-            **/build/outputs/apk/debug/*.apk
+            **/build/outputs/apk/**/*.apk
