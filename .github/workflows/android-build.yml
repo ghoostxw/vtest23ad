@@ -13,72 +13,125 @@ jobs:
       # 1. Клонирование репозитория
       - name: Клонирование репозитория
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # 2. Установка JDK 21
+      # 2. Установка JDK 21 (обязательно до Android SDK)
       - name: Установка JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      # 3. Установка Android SDK (исправленная версия)
+      # 3. Установка Android SDK (ИСПРАВЛЕННЫЙ формат!)
       - name: Установка Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: |
-            platform-tools
-            platforms;android-34
-            build-tools;34.0.0
-            cmdline-tools;latest
+            "platform-tools"
+            "platforms;android-34"
+            "build-tools;34.0.0"
+            "cmdline-tools;latest"
           accept-android-sdk-licenses: true
 
-      # 4. Создание gradlew если его нет
-      - name: Проверка и создание gradlew
-        id: gradle_check
+      # 4. Проверка установки Android SDK
+      - name: Проверка Android SDK
         run: |
-          if [ ! -f "./gradlew" ]; then
-            echo "gradlew отсутствует, создаю..."
-            gradle wrapper --gradle-version 8.5
-          else
-            echo "gradlew найден, даю права на выполнение..."
-          fi
-          chmod +x ./gradlew || true
-          
-          # Выводим информацию о проекте
-          echo "Проверка структуры проекта..."
-          find . -name "*.gradle*" -o -name "*.kts" | head -10
-          ./gradlew projects --no-daemon 2>&1 | head -50 || echo "Не удалось получить список проектов"
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
+          ls -la $ANDROID_HOME/platforms/ || echo "Платформы не найдены"
+          ls -la $ANDROID_HOME/build-tools/ || echo "Build tools не найдены"
 
-      # 5. Сборка APK
-      - name: Сборка APK (Debug)
+      # 5. Настройка переменных окружения для Android
+      - name: Настройка окружения Android
         run: |
-          echo "Начинаем сборку..."
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH" >> $GITHUB_ENV
+
+      # 6. Проверка и создание gradlew
+      - name: Подготовка Gradle
+        run: |
+          # Проверяем есть ли gradlew
+          if [ -f "./gradlew" ]; then
+            echo "gradlew найден"
+            chmod +x ./gradlew
+          else
+            echo "gradlew не найден, создаём..."
+            # Проверяем есть ли файлы Gradle
+            if [ -f "settings.gradle.kts" ] || [ -f "settings.gradle" ]; then
+              gradle wrapper --gradle-version 8.5 --distribution-type bin
+            else
+              echo "ВНИМАНИЕ: Не найдены Gradle конфигурационные файлы"
+              echo "Создаём минимальную структуру..."
+              cat > settings.gradle.kts << 'EOF'
+              pluginManagement {
+                  repositories {
+                      google()
+                      mavenCentral()
+                      gradlePluginPortal()
+                  }
+              }
+              dependencyResolutionManagement {
+                  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+                  repositories {
+                      google()
+                      mavenCentral()
+                  }
+              }
+              rootProject.name = "V2rayAdGuard"
+              include(":app")
+              EOF
+              gradle wrapper --gradle-version 8.5
+            fi
+            chmod +x ./gradlew
+          fi
+          
+          # Проверяем версию Gradle
+          ./gradlew --version || echo "Gradle не запускается"
+
+      # 7. Сборка APK (с диагностикой)
+      - name: Сборка APK
+        timeout-minutes: 15
+        run: |
+          echo "=== Информация о проекте ==="
+          ./gradlew projects --no-daemon 2>&1 | tail -50 || true
+          
+          echo "=== Запуск сборки ==="
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
             --info \
-            -Pandroid.injected.testOnly=false
+            --no-build-cache \
+            --rerun-tasks 2>&1 | tee build.log
+          
+          # Проверяем результат
+          if [ $? -eq 0 ]; then
+            echo "✅ Сборка успешна!"
+            echo "Найденные APK файлы:"
+            find . -name "*.apk" -type f 2>/dev/null || echo "APK не найдены"
+          else
+            echo "❌ Сборка завершилась с ошибкой"
+            echo "Последние 50 строк лога:"
+            tail -50 build.log
+            exit 1
+          fi
 
-      # 6. Загрузка APK (исправленный путь)
-      - name: Загрузка APK-артефактов
+      # 8. Загрузка APK
+      - name: Загрузка APK артефактов
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: apk-debug
+          name: android-apk-debug
           path: |
+            **/app/build/outputs/apk/**/*.apk
+            **/build/outputs/apk/**/*.apk
             app/build/outputs/apk/debug/*.apk
-            */build/outputs/apk/debug/*.apk
-          retention-days: 7
           if-no-files-found: error
 
-      # 7. Сохранение логов ТОЛЬКО при ошибке (опционально)
-      - name: Сохранение логов при ошибке сборки
+      # 9. Сохранение логов при ошибке
+      - name: Сохранение логов сборки
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
-          path: |
-            **/build/reports/
-            .gradle/
+          path: build.log
           if-no-files-found: ignore
