@@ -47,12 +47,12 @@ jobs:
             "ndk;25.2.9519653"
           yes | sdkmanager --licenses
 
-      - name: Install gomobile
-        run: |
-          go version
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          gomobile init
+          - name: Install gomobile (compatible)
+              run: |
+              go version
+              go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20240101
+              export PATH="$(go env GOPATH)/bin:$PATH"
+              gomobile init
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
