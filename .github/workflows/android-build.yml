@@ -53,12 +53,23 @@ jobs:
 
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
 
+      - name: Locate Android project
+        run: |
+          set -e
+          echo "Searching settings.gradle..."
+          SETTINGS_DIR=$(dirname "$(find . -name settings.gradle -o -name settings.gradle.kts | head -n 1)")
+          echo "Found in: $SETTINGS_DIR"
+          echo "ANDROID_PROJECT_DIR=$SETTINGS_DIR" >> $GITHUB_ENV
+
       - name: Build APK
         run: |
+          set -e
+          cd "$ANDROID_PROJECT_DIR"
           gradle :app:assembleDebug --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            **/build/outputs/apk/debug/*.apk
