@@ -1,4 +1,4 @@
-name: Минимальная сборка
+name: 🚀 Сборка с диагностикой
 
 on: [workflow_dispatch]
 
@@ -9,43 +9,142 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Быстрое исправление
+      - name: 🔧 Проверка структуры
         run: |
-          # 1. Копируем корневой файл в app
-          if [ -f "build.gradle.kts" ] && [ ! -s "app/build.gradle.kts" ]; then
-            cp build.gradle.kts app/build.gradle.kts
+          echo "=== ТЕКУЩАЯ СТРУКТУРА ==="
+          echo "1. Корневой build.gradle.kts:"
+          cat build.gradle.kts 2>/dev/null | head -10 || echo "Нет файла"
+          
+          echo ""
+          echo "2. app/build.gradle.kts:"
+          cat app/build.gradle.kts 2>/dev/null | head -30 || echo "Нет файла"
+          
+          echo ""
+          echo "3. Ключевые строки из app/build.gradle.kts:"
+          grep -n "plugins\|android\|applicationId\|dependencies" app/build.gradle.kts 2>/dev/null || echo "Не найдены"
+          
+          # Авто-исправление если нужно
+          if [ ! -f "app/build.gradle.kts" ] || [ ! -s "app/build.gradle.kts" ]; then
+            echo "Создаём app/build.gradle.kts..."
+            cat > app/build.gradle.kts << 'EOF'
+            plugins {
+                id("com.android.application")
+                kotlin("android")
+            }
+            
+            android {
+                compileSdk = 34
+                namespace = "com.example.app"
+                
+                defaultConfig {
+                    applicationId = "com.example.app"
+                    minSdk = 21
+                    targetSdk = 34
+                    versionCode = 1
+                    versionName = "1.0"
+                }
+                
+                buildTypes {
+                    getByName("debug") {
+                        isMinifyEnabled = false
+                    }
+                }
+            }
+            
+            dependencies {
+                implementation("androidx.core:core-ktx:1.12.0")
+            }
+            EOF
           fi
-          
-          # 2. Создаём минимальный корневой файл
-          cat << 'EOF' > build.gradle.kts
-          plugins {
-              id("com.android.application") version "8.5.0" apply false
-              id("org.jetbrains.kotlin.android") version "1.9.20" apply false
-          }
-          EOF
-          
-          # 3. Минимальный settings.gradle.kts
-          cat << 'EOF' > settings.gradle.kts
-          pluginManagement {
-              repositories { google(); mavenCentral(); gradlePluginPortal() }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
-          }
-          rootProject.name = "App"
-          include(":app")
-          EOF
       
-      - name: Сборка
+      - name: ⚙️ Установка окружения
         run: |
-          # Устанавливаем только JDK
+          # Минимальная установка
           sudo apt update
-          sudo apt install -y openjdk-17-jdk
+          sudo apt install -y openjdk-17-jdk wget unzip
           
-          if [ -f "gradlew" ]; then
+          # Android SDK
+          mkdir -p ~/android-sdk
+          cd ~/android-sdk
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+          
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+          
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33"
+      
+      - name: 🏗️ Сборка с детальным логом
+        run: |
+          echo "=== ЗАПУСК СБОРКИ ==="
+          
+          # Создаём gradlew если нет
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper --gradle-version 7.5
             chmod +x gradlew
-            ./gradlew :app:assembleDebug --stacktrace 2>&1 | tail -100
           else
-            echo "gradlew не найден"
+            chmod +x gradlew
           fi
+          
+          # Запускаем с максимальной детализацией
+          ./gradlew :app:assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            --console=plain 2>&1 | tee /tmp/full_build.log
+          
+          echo ""
+          echo "=== АНАЛИЗ РЕЗУЛЬТАТА ==="
+          
+          # Проверяем успешность
+          if grep -q "BUILD SUCCESSFUL" /tmp/full_build.log; then
+            echo "✅ СБОРКА УСПЕШНА ПО ЛОГУ"
+          else
+            echo "❌ СБОРКА НЕ УСПЕШНА ПО ЛОГУ"
+          fi
+          
+          # Показываем что делал Gradle
+          echo ""
+          echo "Последние задачи Gradle:"
+          grep -E "(Task|Executing|> Task)" /tmp/full_build.log | tail -20
+      
+      - name: 🔍 Глубокий поиск результатов
+        if: success()
+        run: |
+          echo "=== ГЛУБОКИЙ ПОИСК РЕЗУЛЬТАТОВ ==="
+          
+          echo "1. ВСЕ файлы в app/build/:"
+          find app/build/ -type f 2>/dev/null | head -30 || echo "Нет файлов"
+          
+          echo ""
+          echo "2. Поиск по типам файлов:"
+          echo "APK:" && find . -name "*.apk" -type f 2>/dev/null | head -5
+          echo "AAR:" && find . -name "*.aar" -type f 2>/dev/null | head -5
+          echo "JAR:" && find . -name "*.jar" -type f 2>/dev/null | head -5
+          
+          echo ""
+          echo "3. Директории outputs:"
+          find . -type d -name "outputs" 2>/dev/null | while read dir; do
+            echo "=== $dir ==="
+            find "$dir" -type f -name "*.apk" -o -name "*.aar" 2>/dev/null | head -5
+          done
+          
+          echo ""
+          echo "4. Размеры директорий:"
+          du -sh app/build/ 2>/dev/null || echo "Нет app/build"
+          du -sh */build/ 2>/dev/null | head -10
+      
+      - name: 📦 Загрузка ВСЕГО что собралось
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-outputs
+          path: |
+            app/build/outputs/
+            **/build/outputs/
+            **/*.apk
+            **/*.aar
+          if-no-files-found: warn
