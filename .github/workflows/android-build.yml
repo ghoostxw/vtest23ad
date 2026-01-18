@@ -9,7 +9,6 @@ env:
   JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
   ANDROID_SDK_ROOT: /home/runner/Android/Sdk
   GOPATH: /home/runner/go
-  GO111MODULE: off
 
 jobs:
   build:
@@ -48,15 +47,14 @@ jobs:
             "ndk;25.2.9519653"
           yes | sdkmanager --licenses
 
-      # gomobile WITHOUT modules (this avoids Go 1.24 requirement)
-      - name: Install gomobile (GOPATH mode)
+      # gomobile install — CORRECT for Go 1.23
+      - name: Install gomobile
         run: |
           set -e
           go version
-          mkdir -p "$GOPATH"
           export PATH="$GOPATH/bin:$PATH"
 
-          go get golang.org/x/mobile/cmd/gomobile
+          go install golang.org/x/mobile/cmd/gomobile
           gomobile init
           gomobile version
 
