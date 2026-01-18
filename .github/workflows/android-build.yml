@@ -23,11 +23,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Go version, supported by GitHub Actions
+      # Go supported by GitHub Actions
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: '1.23.12'
 
       - name: Install Android commandline tools and SDK packages
         run: |
@@ -47,11 +47,12 @@ jobs:
             "ndk;25.2.9519653"
           yes | sdkmanager --licenses
 
-      # FIX: gomobile without @latest
+      # gomobile pinned to a pre-Go-1.24 commit
       - name: Install gomobile
         run: |
+          set -e
           go version
-          go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20240101
+          go install golang.org/x/mobile/cmd/gomobile@4b6d9d1
           export PATH="$(go env GOPATH)/bin:$PATH"
           gomobile init
           gomobile version
