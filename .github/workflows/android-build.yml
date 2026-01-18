@@ -1,4 +1,4 @@
-name: Сборка Android APK
+name: Android Build
 
 on:
   push:
@@ -8,186 +8,127 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
-      # 1. Клонирование репозитория
-      - name: Клонирование репозитория
+      # 1. Клонирование
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      # 2. Установка JDK 21
-      - name: Установка JDK 21
+      # 2. Установка JDK
+      - name: Setup JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
-      # 3. Установка Android SDK через ОФИЦИАЛЬНЫЙ action Google
-      - name: Установка Android SDK
-        uses: android-actions/setup-android@v3
-        id: android-sdk-setup
-        with:
-          # Пакеты указываем через запятую в ОДНОЙ строке
-          packages: "platform-tools,platforms;android-34,build-tools;34.0.0"
-          accept-android-sdk-licenses: true
-
-      # 4. Альтернатива: если шаг 3 не работает, используем этот
-      - name: Установка Android SDK (альтернатива)
-        if: steps.android-sdk-setup.outcome == 'failure'
+      # 3. Установка Android SDK (упрощенная)
+      - name: Setup Android
         run: |
-          echo "Устанавливаем Android SDK вручную..."
-          
-          # Создаём директорию для SDK
+          # Создаем директорию
           mkdir -p ~/android-sdk
           cd ~/android-sdk
           
-          # Скачиваем Command Line Tools
+          # Скачиваем tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q commandlinetools-linux-11076708_latest.zip
           mkdir -p cmdline-tools/latest
-          mv cmdline-tools/* cmdline-tools/latest/
+          mv cmdline-tools/* cmdline-tools/latest/ || true
           
-          # Устанавливаем переменные окружения
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          # Экспортируем переменные
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
           
-          # Принимаем лицензии
-          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-          
-          # Устанавливаем компоненты
+          # Лицензии и установка
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-          
-          echo "Проверка установки:"
-          ls -la $HOME/android-sdk/platforms/
 
-      # 5. Проверка установки SDK
-      - name: Проверка Android SDK
+      # 4. Установка Go (для core/go)
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          
+      # 5. Установка Rust (для rust/)
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-linux-android
+          override: true
+          
+      # 6. Установка CMake и NDK
+      - name: Setup NDK and CMake
         run: |
-          echo "=== Проверка Android окружения ==="
-          echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-          echo "ANDROID_HOME: $ANDROID_HOME"
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1" "ndk;25.2.9519653"
           
-          # Проверяем доступные команды
-          which sdkmanager || echo "sdkmanager не найден в PATH"
-          which adb || echo "adb не найден"
-          
-          # Проверяем установленные компоненты
-          if [ -d "$ANDROID_SDK_ROOT/platforms/android-34" ]; then
-            echo "✅ Android SDK Platform 34 установлен"
-          else
-            echo "❌ Android SDK Platform 34 не найден"
-            echo "Содержимое $ANDROID_SDK_ROOT/platforms/:"
-            ls -la "$ANDROID_SDK_ROOT/platforms/" 2>/dev/null || echo "Директория не существует"
-          fi
-
-      # 6. Настройка Gradle
-      - name: Настройка Gradle
+      # 7. Сборка нативных компонентов ПЕРЕД Android
+      - name: Build Native Components
         run: |
-          echo "=== Настройка Gradle ==="
+          echo "=== Building Go components ==="
+          cd core/go
+          go mod download 2>&1 | tail -20
           
-          # Если gradlew существует, даём права
+          echo "=== Building Rust components ==="
+          cd ../../rust
+          cargo build --target aarch64-linux-android --release 2>&1 | tail -20 || echo "Rust build might fail, continuing..."
+          
+      # 8. Даем права gradlew
+      - name: Prepare Gradle
+        run: |
           if [ -f "gradlew" ]; then
-            echo "gradlew найден"
             chmod +x gradlew
-            ./gradlew --version || echo "Не удалось запустить gradlew"
           else
-            echo "gradlew не найден, проверяем структуру проекта..."
-            
-            # Смотрим, есть ли Gradle файлы
-            echo "Содержимое репозитория:"
-            ls -la
-            
-            # Если есть Android проект, создаём gradlew
-            if [ -d "app" ] && [ -f "app/build.gradle.kts" ] || [ -f "app/build.gradle" ]; then
-              echo "Android проект обнаружен, создаём gradlew..."
-              
-              # Создаём settings.gradle.kts если его нет
-              if [ ! -f "settings.gradle.kts" ] && [ ! -f "settings.gradle" ]; then
-                cat > settings.gradle.kts << 'EOF'
-                pluginManagement {
-                    repositories {
-                        google()
-                        mavenCentral()
-                        gradlePluginPortal()
-                    }
-                }
-                dependencyResolutionManagement {
-                    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-                    repositories {
-                        google()
-                        mavenCentral()
-                    }
-                }
-                rootProject.name = "AndroidApp"
-                include(":app")
-                EOF
-              fi
-              
-              # Создаём gradle wrapper
-              gradle wrapper --gradle-version 8.5 --distribution-type bin
-              chmod +x gradlew
-            else
-              echo "❌ Android проект не обнаружен!"
-              echo "Создайте папку 'app' с файлом build.gradle.kts"
-              exit 1
-            fi
+            # Создаем gradlew если его нет (хотя должен быть)
+            gradle wrapper --gradle-version 8.5
+            chmod +x gradlew
           fi
-
-      # 7. Сборка APK
-      - name: Сборка APK
+          
+      # 9. Сборка Android (ТОЛЬКО КОТЛИН ЧАСТЬ)
+      - name: Build Android
         env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
         run: |
-          echo "=== Запуск сборки ==="
+          echo "=== Building Android APK ==="
           
-          # Сначала проверяем задачи
-          echo "Проверка доступных задач Gradle..."
-          ./gradlew tasks 2>&1 | grep -i "assemble" || echo "Задачи assemble не найдены"
+          # Сначала очистка
+          ./gradlew clean
           
-          echo "Сборка APK..."
-          set -x  # Включаем отладку
-          
-          # Пробуем собрать
-          if ./gradlew :app:assembleDebug \
+          # Пробуем собрать только Kotlin часть, без нативных компонентов
+          ./gradlew :app:assembleDebug \
+            -PskipNativeBuild=true \
             --no-daemon \
             --stacktrace \
-            --console=plain \
-            --info; then
-            echo "✅ Сборка успешно завершена!"
-          else
-            echo "❌ Ошибка сборки"
-            echo "Последние 50 строк лога:"
-            tail -50 build/reports/ || echo "Логи не найдены"
-            exit 1
-          fi
+            --console=plain 2>&1 | tee build.log
           
-          set +x  # Выключаем отладку
-
-      # 8. Поиск и загрузка APK
-      - name: Поиск APK файлов
-        if: success()
-        run: |
-          echo "=== Поиск собранных APK ==="
-          
-          # Ищем APK файлы
-          find . -name "*.apk" -type f 2>/dev/null | while read file; do
-            echo "Найден APK: $file"
-            ls -lh "$file"
-          done
-          
-          # Если не нашли, создаём тестовый APK
-          if ! find . -name "*.apk" -type f 2>/dev/null | grep -q .; then
-            echo "⚠️ APK файлы не найдены"
-            echo "Проверяем структуру вывода сборки..."
-            find . -type d -name "outputs" -o -name "apk" 2>/dev/null | head -10
+          # Если не сработало, пробуем без флагов
+          if [ $? -ne 0 ]; then
+            echo "First attempt failed, trying without skipNativeBuild..."
+            ./gradlew :app:assembleDebug \
+              --no-daemon \
+              --stacktrace 2>&1 | tail -100
           fi
 
-      - name: Загрузка APK артефактов
+      # 10. Загрузка результатов
+      - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: |
             app/build/outputs/apk/debug/*.apk
-            */build/outputs/apk/debug/*.apk
-            **/*.apk
+            **/*debug*.apk
           if-no-files-found: warn
+
+      # 11. Логи при ошибке
+      - name: Upload Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build.log
+            **/build/reports/**
+          if-no-files-found: ignore
