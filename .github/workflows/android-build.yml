@@ -21,19 +21,16 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-        # Этот экшен автоматически настраивает кеширование, что ускорит сборку
 
       - name: Make Gradlew Executable
         run: chmod +x gradlew
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug
-        # assembleDebug — это точная команда для сборки APK файла
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: debug-apks
-          # Ищем APK во всех подпапках, так как имя модуля может отличаться от 'app'
-          path: **/build/outputs/apk/debug/*.apk
+          path: '**/build/outputs/apk/debug/*.apk'
           if-no-files-found: error
