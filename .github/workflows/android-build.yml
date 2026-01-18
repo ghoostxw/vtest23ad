@@ -15,10 +15,9 @@ jobs:
       GRADLE_USER_HOME: /tmp/gradle
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install system deps
         run: |
           set -e
           sudo apt-get update
@@ -34,16 +33,11 @@ jobs:
         run: |
           set -e
           SDK="$ANDROID_SDK_ROOT"
-
           mkdir -p "$SDK/cmdline-tools"
           cd "$HOME"
-
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d "$SDK/cmdline-tools"
-
-          if [ -d "$SDK/cmdline-tools/cmdline-tools" ]; then
-            mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
-          fi
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q commandlinetools-linux-9477386_latest.zip -d "$SDK/cmdline-tools"
+          mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
 
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" \
@@ -53,21 +47,19 @@ jobs:
 
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
 
-      - name: Locate Android project
+      - name: Locate Gradle project
         run: |
           set -e
-          echo "Searching settings.gradle..."
-          SETTINGS_DIR=$(dirname "$(find . -name settings.gradle -o -name settings.gradle.kts | head -n 1)")
-          echo "Found in: $SETTINGS_DIR"
-          echo "ANDROID_PROJECT_DIR=$SETTINGS_DIR" >> $GITHUB_ENV
+          SETTINGS=$(find . -name settings.gradle -o -name settings.gradle.kts | head -n 1)
+          echo "SETTINGS=$SETTINGS"
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> $GITHUB_ENV
 
       - name: Build APK
         run: |
           set -e
-          cd "$ANDROID_PROJECT_DIR"
-          gradle :app:assembleDebug --no-daemon
+          gradle -p "$PROJECT_DIR" :app:assembleDebug --no-daemon
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
