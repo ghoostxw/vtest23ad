@@ -1,4 +1,4 @@
-name: 🚀 Исправление и сборка
+name: 🚀 Сборка с исправлением Gradle
 
 on: [workflow_dispatch]
 
@@ -9,63 +9,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # 1. ПРОСТОЕ ИСПРАВЛЕНИЕ: меняем файлы местами
-      - name: 🔧 Исправление файлов
+      # 1. ИСПРАВЛЯЕМ ВЕРСИЮ GRADLE
+      - name: 🔧 Исправление версии Gradle
         run: |
-          echo "=== ИСПРАВЛЯЕМ ==="
+          echo "=== ИСПРАВЛЯЕМ ВЕРСИЮ GRADLE ==="
           
-          # Сохраняем корневой файл (он содержит Android конфиг)
-          if [ -f "build.gradle.kts" ]; then
-            echo "Сохраняем корневой build.gradle.kts..."
-            cp build.gradle.kts /tmp/root_build_backup.kts
+          # Исправляем gradle-wrapper.properties
+          if [ -f "gradle/wrapper/gradle-wrapper.properties" ]; then
+            echo "Меняем версию Gradle на 7.5..."
+            sed -i 's/gradle-.*-bin\.zip/gradle-7.5-bin.zip/' gradle/wrapper/gradle-wrapper.properties
+            sed -i 's/gradle-.*-all\.zip/gradle-7.5-bin.zip/' gradle/wrapper/gradle-wrapper.properties
+            echo "Обновлённый файл:"
+            cat gradle/wrapper/gradle-wrapper.properties
+          else
+            echo "Создаём gradle-wrapper.properties..."
+            mkdir -p gradle/wrapper
+            cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+            distributionBase=GRADLE_USER_HOME
+            distributionPath=wrapper/dists
+            distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-bin.zip
+            zipStoreBase=GRADLE_USER_HOME
+            zipStorePath=wrapper/dists
+            EOF
           fi
           
-          # Перемещаем корневой файл в app/
-          echo "Перемещаем Android конфиг в app/..."
-          mv build.gradle.kts app/build.gradle.kts
-          
-          # Создаём новый корневой файл
-          echo "Создаём новый корневой build.gradle.kts..."
-          echo 'plugins {' > build.gradle.kts
-          echo '    id("com.android.application") version "8.5.0" apply false' >> build.gradle.kts
-          echo '    id("org.jetbrains.kotlin.android") version "1.9.20" apply false' >> build.gradle.kts
-          echo '}' >> build.gradle.kts
-          
-          # Создаём settings.gradle.kts если нет
-          echo "Проверяем settings.gradle.kts..."
-          if [ ! -f "settings.gradle.kts" ]; then
-            echo 'pluginManagement {' > settings.gradle.kts
-            echo '    repositories {' >> settings.gradle.kts
-            echo '        google()' >> settings.gradle.kts
-            echo '        mavenCentral()' >> settings.gradle.kts
-            echo '        gradlePluginPortal()' >> settings.gradle.kts
-            echo '    }' >> settings.gradle.kts
-            echo '}' >> settings.gradle.kts
-            echo '' >> settings.gradle.kts
-            echo 'dependencyResolutionManagement {' >> settings.gradle.kts
-            echo '    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' >> settings.gradle.kts
-            echo '    repositories {' >> settings.gradle.kts
-            echo '        google()' >> settings.gradle.kts
-            echo '        mavenCentral()' >> settings.gradle.kts
-            echo '    }' >> settings.gradle.kts
-            echo '}' >> settings.gradle.kts
-            echo '' >> settings.gradle.kts
-            echo 'rootProject.name = "V2rayAdGuard"' >> settings.gradle.kts
-            echo 'include(":app")' >> settings.gradle.kts
+          # Исправляем файлы если нужно
+          echo ""
+          echo "Проверяем app/build.gradle.kts..."
+          if [ -f "app/build.gradle.kts" ]; then
+            # Убираем устаревшие опции
+            sed -i '/android.enableD8/d' app/build.gradle.kts
+            sed -i '/android.enableJetifier/d' app/build.gradle.kts
+            echo "app/build.gradle.kts очищен от устаревших опций"
           fi
-          
-          echo "=== ПРОВЕРКА ==="
-          echo "app/build.gradle.kts размер: $(wc -l < app/build.gradle.kts) строк"
-          echo "Корневой build.gradle.kts:"
-          cat build.gradle.kts
       
-      # 2. Установка окружения
-      - name: ⚙️ Установка JDK и Android
+      # 2. Установка JDK 17 (обязательно для Gradle 7.5)
+      - name: ⚙️ Установка JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      # 3. Установка Android SDK
+      - name: 🤖 Установка Android SDK
         run: |
-          sudo apt update
-          sudo apt install -y openjdk-17-jdk
-          
-          # Простой Android SDK
           mkdir -p ~/android-sdk
           cd ~/android-sdk
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
@@ -76,52 +63,46 @@ jobs:
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
           
-          # Лицензии и установка
           yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
       
-      # 3. Сборка
-      - name: 🏗️ Тестовая сборка
+      # 4. СБОРКА С ПРАВИЛЬНОЙ ВЕРСИЕЙ GRADLE
+      - name: 🏗️ Сборка с Gradle 7.5
         run: |
-          # Gradle wrapper
-          if [ ! -f "gradlew" ]; then
-            gradle wrapper --gradle-version 7.5
-            chmod +x gradlew
-          else
-            chmod +x gradlew
-          fi
+          echo "=== ЗАПУСК СБОРКИ ==="
           
-          echo "=== ТЕСТОВАЯ СБОРКА ==="
-          echo "1. Проверка проектов..."
-          ./gradlew projects --no-daemon 2>&1 | grep -A5 "Root project"
+          # Обновляем wrapper
+          ./gradlew wrapper --gradle-version 7.5 --distribution-type bin
+          chmod +x gradlew
+          
+          echo "Версия Gradle:"
+          ./gradlew --version 2>&1 | head -3
           
           echo ""
-          echo "2. Запуск сборки..."
-          if ./gradlew :app:assembleDebug --stacktrace; then
+          echo "Сборка с совместимыми настройками..."
+          ./gradlew :app:assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --warning-mode=all \
+            --console=plain 2>&1 | tee /tmp/build.log
+          
+          if [ $? -eq 0 ]; then
             echo "✅ СБОРКА УСПЕШНА!"
-            
             echo ""
-            echo "3. Поиск APK..."
-            APK_FILES=$(find . -name "*.apk" -type f 2>/dev/null)
-            if [ -n "$APK_FILES" ]; then
-              echo "Найдены APK:"
-              echo "$APK_FILES"
-            else
-              echo "APK не найдены. Проверяем что собралось..."
-              find app/build/ -type f -name "*.apk" -o -name "*.aar" 2>/dev/null | head -10 || echo "Ничего не найдено"
-            fi
+            echo "APK файлы:"
+            find . -name "*.apk" -type f 2>/dev/null || echo "Не найдены"
           else
-            echo "❌ ОШИБКА СБОРКИ"
+            echo "❌ ОШИБКА!"
+            echo "Последние 30 строк:"
+            tail -30 /tmp/build.log
             exit 1
           fi
       
-      # 4. Загрузка результатов
-      - name: 📦 Загрузка артефактов
+      # 5. Загрузка результатов
+      - name: 📦 Загрузка APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: android-build
-          path: |
-            app/build/outputs/
-            **/*.apk
+          name: android-apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
