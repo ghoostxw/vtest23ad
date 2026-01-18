@@ -8,6 +8,8 @@ on:
 env:
   JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
   ANDROID_SDK_ROOT: /home/runner/Android/Sdk
+  GOPATH: /home/runner/go
+  GO111MODULE: off
 
 jobs:
   build:
@@ -23,7 +25,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Go supported by GitHub Actions
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -47,13 +48,15 @@ jobs:
             "ndk;25.2.9519653"
           yes | sdkmanager --licenses
 
-      # gomobile pinned to a pre-Go-1.24 commit
-      - name: Install gomobile
+      # gomobile WITHOUT modules (this avoids Go 1.24 requirement)
+      - name: Install gomobile (GOPATH mode)
         run: |
           set -e
           go version
-          go install golang.org/x/mobile/cmd/gomobile@4b6d9d1
-          export PATH="$(go env GOPATH)/bin:$PATH"
+          mkdir -p "$GOPATH"
+          export PATH="$GOPATH/bin:$PATH"
+
+          go get golang.org/x/mobile/cmd/gomobile
           gomobile init
           gomobile version
 
