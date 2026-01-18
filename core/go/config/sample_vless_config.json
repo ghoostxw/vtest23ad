@@ -1,0 +1,59 @@
+{
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "example.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "your-uuid-here",
+                "alterId": 0,
+                "security": "none"
+              }
+            ]
+          }
+        ],
+        "fallbacks": [
+          {
+            "dest": 80,
+            "xver": 1
+          },
+          {
+            "dest": 443,
+            "xver": 1
+          }
+        ],
+        "mux": {
+          "enabled": true,
+          "concurrency": 8
+        }
+      },
+      "tag": "vless-out"
+    }
+  ],
+  "inbounds": [
+    {
+      "port": 1080,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": true,
+        "ip": "127.0.0.1"
+      },
+      "tag": "socks-in"
+    }
+  ],
+  "dns": {
+    "servers": [
+      "1.1.1.1",
+      "8.8.8.8"
+    ],
+    "clientIp": "127.0.0.1"
+  },
+  "log": {
+    "loglevel": "info"
+  }
+}

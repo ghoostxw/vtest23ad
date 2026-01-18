@@ -1,0 +1,6 @@
+include(":app")
+include(":core")
+include(":jni")
+include(":rust")
+include(":dns")
+include(":shared")

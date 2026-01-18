@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">V2Ray AdGuard</string>
+    <string name="vpn_toggle">Toggle VPN</string>
+    <string name="adblock_toggle">Toggle AdBlock</string>
+    <string name="settings">Settings</string>
+    <string name="connection_status">Connection Status</string>
+    <string name="connected">Connected</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="traffic_stats">Traffic Statistics</string>
+    <string name="dns_queries">DNS Queries</string>
+    <string name="import_config">Import Configuration</string>
+    <string name="export_config">Export Configuration</string>
+    <string name="custom_filters">Custom Filters</string>
+    <string name="exclude_apps">Exclude Apps</string>
+    <string name="exclude_domains">Exclude Domains</string>
+    <string name="only_dns_mode">Only DNS Mode</string>
+    <string name="only_vpn_mode">Only VPN Mode</string>
+    <string name="vpn_and_adblock_mode">VPN + AdBlock Mode</string>
+    <string name="kill_switch_enabled">Kill Switch Enabled</string>
+    <string name="kill_switch_disabled">Kill Switch Disabled</string>
+    <string name="auto_connect">Auto Connect on Startup</string>
+</resources>

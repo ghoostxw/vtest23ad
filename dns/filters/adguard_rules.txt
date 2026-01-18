@@ -1,0 +1,24 @@
+# AdGuard filter rules for blocking ads and trackers
+
+! This file contains custom AdGuard filter rules. 
+
+||example.com| 
+||*.example.com| 
+||tracking.example.com| 
+||ads.example.com| 
+||*.ads.example.com| 
+||*.doubleclick.net| 
+||*.googlesyndication.com| 
+||*.googletagmanager.com| 
+||*.facebook.com| 
+||*.twitter.com| 
+||*.analytics.com| 
+||*.adserver.com| 
+||*.malware.com| 
+||*.tracking.com| 
+||*.popup.com| 
+||*.redirect.com| 
+||*.clickbait.com| 
+||*.spam.com| 
+
+# End of AdGuard filter rules

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package config;
+
+message VlessConfig {
+    string id = 1;
+    string address = 2;
+    int32 port = 3;
+    string network = 4; // e.g., "tcp", "ws", "grpc"
+    string path = 5; // for websocket
+    string security = 6; // e.g., "none", "xtls", "tls"
+    bool fallback = 7; // enable fallback
+    bool multiplex = 8; // enable multiplexing
+}
+
+message DnsConfig {
+    string dns_server = 1; // DNS server address
+    bool use_doh = 2; // use DNS-over-HTTPS
+    bool use_dot = 3; // use DNS-over-TLS
+    repeated string custom_filters = 4; // list of custom filter rules
+}
+
+message AppConfig {
+    VlessConfig vless = 1;
+    DnsConfig dns = 2;
+    repeated string excluded_apps = 3; // apps to exclude from VPN
+    repeated string excluded_domains = 4; // domains to exclude from filtering
+    bool split_tunneling = 5; // enable split tunneling
+    string mode = 6; // "dns_only", "vpn_only", "vpn_and_adblock"
+}
