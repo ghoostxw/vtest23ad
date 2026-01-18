@@ -9,13 +9,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Go 1.24 via Docker (GitHub Actions itself doesn't provide it yet)
+    # Go 1.24 via Docker (official image, Debian trixie)
     container:
       image: golang:1.24
 
     env:
       ANDROID_SDK_ROOT: /sdk
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
       GRADLE_USER_HOME: /tmp/gradle
 
     steps:
@@ -27,7 +27,7 @@ jobs:
           set -e
           apt-get update
           apt-get install -y \
-            openjdk-17-jdk-headless \
+            openjdk-21-jdk-headless \
             unzip \
             wget \
             git \
