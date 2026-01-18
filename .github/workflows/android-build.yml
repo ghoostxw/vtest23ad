@@ -9,12 +9,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # Go 1.24 via Docker (GitHub Actions itself doesn't provide it yet)
     container:
       image: golang:1.24
 
     env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_SDK_ROOT: /sdk
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      GRADLE_USER_HOME: /tmp/gradle
 
     steps:
       - name: Checkout
@@ -22,35 +24,45 @@ jobs:
 
       - name: Install system deps
         run: |
+          set -e
           apt-get update
           apt-get install -y \
-            openjdk-17-jdk \
+            openjdk-17-jdk-headless \
             unzip \
             wget \
-            git
+            git \
+            ca-certificates
 
       - name: Install Android SDK
         run: |
+          set -e
           mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
           cd /tmp
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip commandlinetools-linux-9477386_latest.zip
+          unzip -q commandlinetools-linux-9477386_latest.zip
           mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
           yes | sdkmanager --install \
             "platform-tools" \
             "platforms;android-33" \
             "build-tools;33.0.2" \
             "ndk;25.2.9519653"
+
           yes | sdkmanager --licenses
 
       - name: Install gomobile
         run: |
+          set -e
           go version
           go install golang.org/x/mobile/cmd/gomobile@latest
           export PATH="$(go env GOPATH)/bin:$PATH"
           gomobile init
           gomobile version
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
 
       - name: Build native core
         run: |
@@ -58,9 +70,7 @@ jobs:
           ./scripts/build_native.sh
 
       - name: Build APK
-        run: |
-          chmod +x ./gradlew
-          ./gradlew :app:assembleDebug --no-daemon
+        run: ./gradlew :app:assembleDebug --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
