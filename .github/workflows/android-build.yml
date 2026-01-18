@@ -1,4 +1,4 @@
-name: Android CI - Build APK
+name: Android CI - HARD DEBUG
 
 on:
   push:
@@ -12,12 +12,12 @@ jobs:
     env:
       ANDROID_SDK_ROOT: /home/runner/Android/Sdk
       JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
-      GRADLE_USER_HOME: /tmp/gradle
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install system deps
+      - name: Install base tools
         run: |
           set -e
           sudo apt-get update
@@ -29,39 +29,13 @@ jobs:
             ca-certificates \
             gradle
 
-      - name: Install Android SDK
+      - name: HARD FILE SYSTEM DUMP
         run: |
           set -e
-          SDK="$ANDROID_SDK_ROOT"
-          mkdir -p "$SDK/cmdline-tools"
-          cd "$HOME"
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q commandlinetools-linux-9477386_latest.zip -d "$SDK/cmdline-tools"
-          mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
+          echo "===== PWD ====="
+          pwd
 
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2" \
-            "ndk;25.2.9519653"
+          echo "===== ROOT LS ====="
+          ls -la
 
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
-
-      - name: Locate Gradle project
-        run: |
-          set -e
-          SETTINGS=$(find . -name settings.gradle -o -name settings.gradle.kts | head -n 1)
-          echo "SETTINGS=$SETTINGS"
-          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> $GITHUB_ENV
-
-      - name: Build APK
-        run: |
-          set -e
-          gradle -p "$PROJECT_DIR" :app:assembleDebug --no-daemon
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug-apk
-          path: |
-            **/build/outputs/apk/debug/*.apk
+          echo "===== FIND ALL settings
