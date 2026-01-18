@@ -1,170 +1,304 @@
-name: 🔍 Диагностика проекта
+name: 🚀 Сборка Android APK
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  diagnose:
+  build:
     runs-on: ubuntu-latest
     
     steps:
+      # 1. Клонирование
       - name: 📥 Клонирование репозитория
         uses: actions/checkout@v4
 
-      - name: 📋 Показать структуру проекта
+      # 2. 🔧 ИСПРАВЛЕНИЕ СТРУКТУРЫ ПРОЕКТА
+      - name: 🔧 Исправление структуры Gradle
         run: |
-          echo "=========================================="
-          echo "📁 ПОЛНАЯ СТРУКТУРА ПРОЕКТА"
-          echo "=========================================="
-          find . -type f -name "*.gradle*" -o -name "*.kts" -o -name "*.properties" | sort
+          echo "=== ИСПРАВЛЯЕМ СТРУКТУРУ ==="
           
-          echo ""
-          echo "=========================================="
-          echo "⚙️  НАСТРОЙКИ GRADLE (settings.gradle.kts)"
-          echo "=========================================="
-          if [ -f "settings.gradle.kts" ]; then
-            cat settings.gradle.kts
-          else
-            echo "❌ Файл не найден!"
-          fi
-          
-          echo ""
-          echo "=========================================="
-          echo "🏗️  КОРНЕВОЙ BUILD.GRADLE.KTS"
-          echo "=========================================="
-          if [ -f "build.gradle.kts" ]; then
-            cat build.gradle.kts
-          else
-            echo "❌ Файл не найден!"
-          fi
-          
-          echo ""
-          echo "=========================================="
-          echo "📱 APP/BUILD.GRADLE.KTS (первые 150 строк)"
-          echo "=========================================="
+          # Проверяем текущее состояние
+          echo "1. Проверяем app/build.gradle.kts..."
           if [ -f "app/build.gradle.kts" ]; then
-            head -150 app/build.gradle.kts
-          else
-            echo "❌ Файл не найден!"
-            echo "Содержимое папки app/:"
-            ls -la app/ 2>/dev/null || echo "Папки app нет!"
-          fi
-          
-          echo ""
-          echo "=========================================="
-          echo "📊 GRADLE PROPERTIES"
-          echo "=========================================="
-          if [ -f "gradle.properties" ]; then
-            cat gradle.properties
-          else
-            echo "Нет файла gradle.properties"
-          fi
-          
-          echo ""
-          echo "=========================================="
-          echo "🔧 GRADLE WRAPPER"
-          echo "=========================================="
-          if [ -f "gradle/wrapper/gradle-wrapper.properties" ]; then
-            cat gradle/wrapper/gradle-wrapper.properties
-          else
-            echo "Нет Gradle wrapper"
-          fi
-          
-          echo ""
-          echo "=========================================="
-          echo "📦 ЗАВИСИМОСТИ В ПРОЕКТЕ"
-          echo "=========================================="
-          echo "1. Plugins в app/build.gradle.kts:"
-          grep -A5 -B5 "plugins {" app/build.gradle.kts 2>/dev/null || echo "Не найден"
-          
-          echo ""
-          echo "2. Android блок:"
-          grep -A20 "android {" app/build.gradle.kts 2>/dev/null | head -30 || echo "Не найден"
-          
-          echo ""
-          echo "3. Dependencies:"
-          grep -A50 "dependencies {" app/build.gradle.kts 2>/dev/null | head -60 || echo "Не найден"
-
-      - name: 🧪 Проверка Gradle
-        run: |
-          echo "=========================================="
-          echo "🧪 ПРОВЕРКА GRADLE"
-          echo "=========================================="
-          
-          # Создаем gradlew если нет
-          if [ ! -f "gradlew" ]; then
-            echo "Создаю gradlew..."
-            if [ -f "gradle/wrapper/gradle-wrapper.properties" ]; then
-              GRADLE_VERSION=$(grep "distributionUrl" gradle/wrapper/gradle-wrapper.properties | sed 's/.*gradle-\(.*\)-bin.*/\1/')
-              echo "Версия из wrapper: $GRADLE_VERSION"
-              gradle wrapper --gradle-version "$GRADLE_VERSION" --distribution-type bin
+            FILE_SIZE=$(stat -c%s "app/build.gradle.kts" 2>/dev/null || echo "0")
+            if [ "$FILE_SIZE" -lt 10 ]; then
+              echo "Файл app/build.gradle.kts почти пустой ($FILE_SIZE байт)"
+              NEED_FIX=true
             else
-              gradle wrapper --gradle-version 8.5 --distribution-type bin
+              echo "Файл app/build.gradle.kts нормального размера ($FILE_SIZE байт)"
+              NEED_FIX=false
             fi
-            chmod +x gradlew
           else
-            chmod +x gradlew
+            echo "Файл app/build.gradle.kts не существует"
+            NEED_FIX=true
           fi
           
-          echo "Проверяем версию Gradle..."
-          ./gradlew --version || echo "❌ Gradle не запускается"
+          echo ""
+          echo "2. Проверяем корневой build.gradle.kts..."
+          if [ -f "build.gradle.kts" ] && grep -q "android {" build.gradle.kts 2>/dev/null; then
+            echo "В корневом файле есть Android конфигурация"
+            HAS_ANDROID_IN_ROOT=true
+          else
+            echo "В корневом файле нет Android конфигурации"
+            HAS_ANDROID_IN_ROOT=false
+          fi
           
           echo ""
-          echo "Список проектов:"
-          ./gradlew projects --no-daemon 2>&1 | tail -50 || echo "❌ Не удалось получить список проектов"
+          echo "3. Исправляем если нужно..."
+          if [ "$NEED_FIX" = true ] && [ "$HAS_ANDROID_IN_ROOT" = true ]; then
+            echo "Копируем Android конфиг из корня в app/"
+            cp build.gradle.kts app/build.gradle.kts
+            echo "✅ Скопировано"
+          elif [ "$NEED_FIX" = true ]; then
+            echo "Создаём базовый app/build.gradle.kts..."
+            cat > app/build.gradle.kts << 'EOF'
+            plugins {
+                id("com.android.application")
+                kotlin("android")
+            }
 
-      - name: 🚀 Попытка сборки
-        run: |
-          echo "=========================================="
-          echo "🚀 ПРОБУЕМ СОБРАТЬ"
-          echo "=========================================="
+            android {
+                compileSdk = 34
+
+                defaultConfig {
+                    applicationId = "com.example.v2rayadguard"
+                    minSdk = 21
+                    targetSdk = 34
+                    versionCode = 1
+                    versionName = "1.0"
+                }
+
+                buildTypes {
+                    getByName("debug") {
+                        isMinifyEnabled = false
+                    }
+                }
+
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
+
+                kotlinOptions {
+                    jvmTarget = "17"
+                }
+            }
+
+            dependencies {
+                implementation("androidx.core:core-ktx:1.12.0")
+                implementation("androidx.appcompat:appcompat:1.6.1")
+            }
+            EOF
+            echo "✅ Создан базовый файл"
+          fi
           
-          # Пробуем разные варианты
-          echo "1. Просто tasks:"
-          ./gradlew tasks --all 2>&1 | grep -i "assemble\|build" | head -20 || echo "Нет assemble задач"
+          # Создаём правильный корневой файл
+          echo ""
+          echo "4. Создаём корневой build.gradle.kts..."
+          cat > build.gradle.kts << 'EOF'
+          plugins {
+              id("com.android.application") version "8.5.0" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.20" apply false
+          }
+          EOF
+          echo "✅ Корневой файл создан"
+          
+          # Проверяем/создаём settings.gradle.kts
+          echo ""
+          echo "5. Проверяем settings.gradle.kts..."
+          if [ ! -f "settings.gradle.kts" ] || ! grep -q "pluginManagement" settings.gradle.kts 2>/dev/null; then
+            echo "Создаём/обновляем settings.gradle.kts..."
+            cat > settings.gradle.kts << 'EOF'
+            pluginManagement {
+                repositories {
+                    google()
+                    mavenCentral()
+                    gradlePluginPortal()
+                }
+            }
+
+            dependencyResolutionManagement {
+                repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+                repositories {
+                    google()
+                    mavenCentral()
+                }
+            }
+
+            rootProject.name = "V2rayAdGuard"
+            include(":app")
+            include(":core")
+            include(":dns:kotlin")
+            EOF
+            echo "✅ settings.gradle.kts создан"
+          else
+            echo "settings.gradle.kts уже правильный"
+          fi
           
           echo ""
-          echo "2. Пробуем собрать:"
-          set +e  # Не выходить при ошибке
+          echo "=== РЕЗУЛЬТАТ ИСПРАВЛЕНИЯ ==="
+          echo "app/build.gradle.kts:"
+          wc -l app/build.gradle.kts 2>/dev/null || echo "Не существует"
+          echo ""
+          echo "Корневой build.gradle.kts:"
+          cat build.gradle.kts
+
+      # 3. Установка JDK
+      - name: ⚙️ Установка JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 4. Установка Android SDK
+      - name: 🤖 Установка Android SDK
+        run: |
+          echo "=== УСТАНОВКА ANDROID SDK ==="
           
+          # Создаём директорию
+          ANDROID_SDK_DIR="$HOME/android-sdk"
+          mkdir -p "$ANDROID_SDK_DIR"
+          
+          # Скачиваем tools
+          cd "$ANDROID_SDK_DIR"
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+          
+          # Экспортируем переменные
+          echo "ANDROID_HOME=$ANDROID_SDK_DIR" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_DIR" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_SDK_DIR/cmdline-tools/latest/bin:$ANDROID_SDK_DIR/platform-tools:$PATH" >> $GITHUB_ENV
+          
+          # Принимаем лицензии
+          echo "Принимаем лицензии..."
+          yes | $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1
+          
+          # Устанавливаем компоненты
+          echo "Устанавливаем platform-tools..."
+          $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager "platform-tools"
+          
+          echo "Устанавливаем Android 34..."
+          $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager "platforms;android-34"
+          
+          echo "Устанавливаем build-tools..."
+          $ANDROID_SDK_DIR/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0"
+          
+          echo "✅ Android SDK установлен"
+
+      # 5. Проверка установки
+      - name: 🔍 Проверка окружения
+        run: |
+          echo "=== ПРОВЕРКА ОКРУЖЕНИЯ ==="
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo ""
+          echo "Проверка компонентов:"
+          ls -la "$ANDROID_HOME/platforms/android-34" 2>/dev/null && echo "✅ Android 34 есть"
+          ls -la "$ANDROID_HOME/build-tools/34.0.0" 2>/dev/null && echo "✅ Build tools 34.0.0 есть"
+          which adb && echo "✅ ADB доступен"
+
+      # 6. Подготовка Gradle
+      - name: 🛠️ Подготовка Gradle
+        run: |
+          echo "=== ПОДГОТОВКА GRADLE ==="
+          
+          # Используем существующий gradlew или создаём
+          if [ -f "gradlew" ]; then
+            echo "gradlew найден"
+            chmod +x gradlew
+            GRADLE_CMD="./gradlew"
+          else
+            echo "gradlew не найден, создаём..."
+            gradle wrapper --gradle-version 7.5 --distribution-type bin
+            chmod +x gradlew
+            GRADLE_CMD="./gradlew"
+          fi
+          
+          # Проверяем версию
+          echo "Проверка версии Gradle:"
+          $GRADLE_CMD --version 2>&1 | head -5 || echo "Не удалось проверить версию"
+
+      # 7. 🏗️ СБОРКА APK
+      - name: 🏗️ Сборка APK
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+        run: |
+          echo "=== НАЧИНАЕМ СБОРКУ ==="
+          
+          # Сначала показываем структуру проектов
+          echo "1. Список проектов:"
+          ./gradlew projects --no-daemon 2>&1 | tail -30
+          
+          echo ""
+          echo "2. Доступные задачи:"
+          ./gradlew tasks --all 2>&1 | grep -i "assemble\|build" | head -10 || echo "Не найдены assemble задачи"
+          
+          echo ""
+          echo "3. Запуск сборки app модуля..."
+          set +e  # Не выходить при ошибке сразу
+          
+          # Пробуем собрать
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
-            --console=plain 2>&1 | tee /tmp/build_output.txt
+            --console=plain \
+            --info 2>&1 | tee /tmp/build_output.log
           
           BUILD_RESULT=$?
           
           echo ""
-          echo "=========================================="
-          echo "📊 РЕЗУЛЬТАТ СБОРКИ"
-          echo "=========================================="
+          echo "=== РЕЗУЛЬТАТ СБОРКИ ==="
           
           if [ $BUILD_RESULT -eq 0 ]; then
-            echo "✅ СБОРКА УСПЕШНА!"
+            echo "🎉 ✅ СБОРКА УСПЕШНО ЗАВЕРШЕНА!"
             echo ""
             echo "Найденные APK файлы:"
-            find . -name "*.apk" -type f 2>/dev/null
+            find . -name "*.apk" -type f 2>/dev/null | while read file; do
+              echo "📦 $file"
+              ls -lh "$file"
+            done
+            
+            # Если не нашли, ищем в стандартных местах
+            if ! find . -name "*.apk" -type f 2>/dev/null | grep -q .; then
+              echo "Ищем в стандартных директориях:"
+              ls -la app/build/outputs/apk/ 2>/dev/null || echo "Директория app/build/outputs/apk/ не существует"
+            fi
           else
             echo "❌ СБОРКА ПРОВАЛИЛАСЬ"
             echo ""
             echo "ПОСЛЕДНИЕ 50 СТРОК ОШИБКИ:"
-            tail -50 /tmp/build_output.txt
+            tail -50 /tmp/build_output.log
             
             echo ""
-            echo "ГДЕ ИМЕННО ОШИБКА:"
-            grep -n -B5 -A5 "error:" /tmp/build_output.txt | tail -30 || grep -n -B5 -A5 "FAILED" /tmp/build_output.txt | tail -30
+            echo "ОСНОВНАЯ ОШИБКА:"
+            grep -i -B5 -A5 "error\|failed\|exception" /tmp/build_output.log | tail -30
             
             echo ""
-            echo "ПОЛНЫЙ ЛОГ СОХРАНЕН В /tmp/build_output.txt"
+            echo "ПОЛНЫЙ ЛОГ СОХРАНЕН В /tmp/build_output.log"
+            exit 1
           fi
 
-      - name: 💾 Сохранить логи
-        if: always()
+      # 8. 📦 Загрузка APK артефактов
+      - name: 📦 Загрузка APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: diagnosis-logs
+          name: android-debug-apk
           path: |
-            /tmp/build_output.txt
-          if-no-files-found: warn
+            app/build/outputs/apk/debug/*.apk
+            */build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      # 9. 📄 Сохранение логов при ошибке
+      - name: 📄 Сохранение логов
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: /tmp/build_output.log
+          if-no-files-found: ignore
