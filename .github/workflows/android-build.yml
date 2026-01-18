@@ -45,8 +45,6 @@ jobs:
             mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
           fi
 
-          "$SDK/cmdline-tools/latest/bin/sdkmanager" --version
-
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --install \
             "platform-tools" \
             "platforms;android-33" \
@@ -55,25 +53,12 @@ jobs:
 
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
 
-      - name: Show Gradle info
+      - name: Build APK
         run: |
-          echo "===== ROOT FILES ====="
-          ls -la
+          gradle :app:assembleDebug --no-daemon
 
-          echo "===== settings.gradle(.kts) ====="
-          if [ -f settings.gradle.kts ]; then cat settings.gradle.kts; fi
-          if [ -f settings.gradle ]; then cat settings.gradle; fi
-
-          echo "===== ALL TASKS ====="
-          gradle tasks --all
-
-      - name: Build project (all modules)
-        run: |
-          gradle build --no-daemon
-
-      - name: Upload APK artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apks
-          path: |
-            **/build/outputs/apk/**/*.apk
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
