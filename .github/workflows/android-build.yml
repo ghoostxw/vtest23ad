@@ -1,4 +1,4 @@
-name: 🚀 Сборка с диагностикой
+name: 🚀 Исправление и сборка
 
 on: [workflow_dispatch]
 
@@ -9,61 +9,63 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: 🔧 Проверка структуры
+      # 1. ПРОСТОЕ ИСПРАВЛЕНИЕ: меняем файлы местами
+      - name: 🔧 Исправление файлов
         run: |
-          echo "=== ТЕКУЩАЯ СТРУКТУРА ==="
-          echo "1. Корневой build.gradle.kts:"
-          cat build.gradle.kts 2>/dev/null | head -10 || echo "Нет файла"
+          echo "=== ИСПРАВЛЯЕМ ==="
           
-          echo ""
-          echo "2. app/build.gradle.kts:"
-          cat app/build.gradle.kts 2>/dev/null | head -30 || echo "Нет файла"
-          
-          echo ""
-          echo "3. Ключевые строки из app/build.gradle.kts:"
-          grep -n "plugins\|android\|applicationId\|dependencies" app/build.gradle.kts 2>/dev/null || echo "Не найдены"
-          
-          # Авто-исправление если нужно
-          if [ ! -f "app/build.gradle.kts" ] || [ ! -s "app/build.gradle.kts" ]; then
-            echo "Создаём app/build.gradle.kts..."
-            cat > app/build.gradle.kts << 'EOF'
-            plugins {
-                id("com.android.application")
-                kotlin("android")
-            }
-            
-            android {
-                compileSdk = 34
-                namespace = "com.example.app"
-                
-                defaultConfig {
-                    applicationId = "com.example.app"
-                    minSdk = 21
-                    targetSdk = 34
-                    versionCode = 1
-                    versionName = "1.0"
-                }
-                
-                buildTypes {
-                    getByName("debug") {
-                        isMinifyEnabled = false
-                    }
-                }
-            }
-            
-            dependencies {
-                implementation("androidx.core:core-ktx:1.12.0")
-            }
-            EOF
+          # Сохраняем корневой файл (он содержит Android конфиг)
+          if [ -f "build.gradle.kts" ]; then
+            echo "Сохраняем корневой build.gradle.kts..."
+            cp build.gradle.kts /tmp/root_build_backup.kts
           fi
-      
-      - name: ⚙️ Установка окружения
-        run: |
-          # Минимальная установка
-          sudo apt update
-          sudo apt install -y openjdk-17-jdk wget unzip
           
-          # Android SDK
+          # Перемещаем корневой файл в app/
+          echo "Перемещаем Android конфиг в app/..."
+          mv build.gradle.kts app/build.gradle.kts
+          
+          # Создаём новый корневой файл
+          echo "Создаём новый корневой build.gradle.kts..."
+          echo 'plugins {' > build.gradle.kts
+          echo '    id("com.android.application") version "8.5.0" apply false' >> build.gradle.kts
+          echo '    id("org.jetbrains.kotlin.android") version "1.9.20" apply false' >> build.gradle.kts
+          echo '}' >> build.gradle.kts
+          
+          # Создаём settings.gradle.kts если нет
+          echo "Проверяем settings.gradle.kts..."
+          if [ ! -f "settings.gradle.kts" ]; then
+            echo 'pluginManagement {' > settings.gradle.kts
+            echo '    repositories {' >> settings.gradle.kts
+            echo '        google()' >> settings.gradle.kts
+            echo '        mavenCentral()' >> settings.gradle.kts
+            echo '        gradlePluginPortal()' >> settings.gradle.kts
+            echo '    }' >> settings.gradle.kts
+            echo '}' >> settings.gradle.kts
+            echo '' >> settings.gradle.kts
+            echo 'dependencyResolutionManagement {' >> settings.gradle.kts
+            echo '    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' >> settings.gradle.kts
+            echo '    repositories {' >> settings.gradle.kts
+            echo '        google()' >> settings.gradle.kts
+            echo '        mavenCentral()' >> settings.gradle.kts
+            echo '    }' >> settings.gradle.kts
+            echo '}' >> settings.gradle.kts
+            echo '' >> settings.gradle.kts
+            echo 'rootProject.name = "V2rayAdGuard"' >> settings.gradle.kts
+            echo 'include(":app")' >> settings.gradle.kts
+          fi
+          
+          echo "=== ПРОВЕРКА ==="
+          echo "app/build.gradle.kts размер: $(wc -l < app/build.gradle.kts) строк"
+          echo "Корневой build.gradle.kts:"
+          cat build.gradle.kts
+      
+      # 2. Установка окружения
+      - name: ⚙️ Установка JDK и Android
+        run: |
+          sudo apt update
+          sudo apt install -y openjdk-17-jdk
+          
+          # Простой Android SDK
           mkdir -p ~/android-sdk
           cd ~/android-sdk
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
@@ -74,14 +76,14 @@ jobs:
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
           
+          # Лицензии и установка
           yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1
-          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33"
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
       
-      - name: 🏗️ Сборка с детальным логом
+      # 3. Сборка
+      - name: 🏗️ Тестовая сборка
         run: |
-          echo "=== ЗАПУСК СБОРКИ ==="
-          
-          # Создаём gradlew если нет
+          # Gradle wrapper
           if [ ! -f "gradlew" ]; then
             gradle wrapper --gradle-version 7.5
             chmod +x gradlew
@@ -89,62 +91,37 @@ jobs:
             chmod +x gradlew
           fi
           
-          # Запускаем с максимальной детализацией
-          ./gradlew :app:assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            --console=plain 2>&1 | tee /tmp/full_build.log
+          echo "=== ТЕСТОВАЯ СБОРКА ==="
+          echo "1. Проверка проектов..."
+          ./gradlew projects --no-daemon 2>&1 | grep -A5 "Root project"
           
           echo ""
-          echo "=== АНАЛИЗ РЕЗУЛЬТАТА ==="
-          
-          # Проверяем успешность
-          if grep -q "BUILD SUCCESSFUL" /tmp/full_build.log; then
-            echo "✅ СБОРКА УСПЕШНА ПО ЛОГУ"
+          echo "2. Запуск сборки..."
+          if ./gradlew :app:assembleDebug --stacktrace; then
+            echo "✅ СБОРКА УСПЕШНА!"
+            
+            echo ""
+            echo "3. Поиск APK..."
+            APK_FILES=$(find . -name "*.apk" -type f 2>/dev/null)
+            if [ -n "$APK_FILES" ]; then
+              echo "Найдены APK:"
+              echo "$APK_FILES"
+            else
+              echo "APK не найдены. Проверяем что собралось..."
+              find app/build/ -type f -name "*.apk" -o -name "*.aar" 2>/dev/null | head -10 || echo "Ничего не найдено"
+            fi
           else
-            echo "❌ СБОРКА НЕ УСПЕШНА ПО ЛОГУ"
+            echo "❌ ОШИБКА СБОРКИ"
+            exit 1
           fi
-          
-          # Показываем что делал Gradle
-          echo ""
-          echo "Последние задачи Gradle:"
-          grep -E "(Task|Executing|> Task)" /tmp/full_build.log | tail -20
       
-      - name: 🔍 Глубокий поиск результатов
-        if: success()
-        run: |
-          echo "=== ГЛУБОКИЙ ПОИСК РЕЗУЛЬТАТОВ ==="
-          
-          echo "1. ВСЕ файлы в app/build/:"
-          find app/build/ -type f 2>/dev/null | head -30 || echo "Нет файлов"
-          
-          echo ""
-          echo "2. Поиск по типам файлов:"
-          echo "APK:" && find . -name "*.apk" -type f 2>/dev/null | head -5
-          echo "AAR:" && find . -name "*.aar" -type f 2>/dev/null | head -5
-          echo "JAR:" && find . -name "*.jar" -type f 2>/dev/null | head -5
-          
-          echo ""
-          echo "3. Директории outputs:"
-          find . -type d -name "outputs" 2>/dev/null | while read dir; do
-            echo "=== $dir ==="
-            find "$dir" -type f -name "*.apk" -o -name "*.aar" 2>/dev/null | head -5
-          done
-          
-          echo ""
-          echo "4. Размеры директорий:"
-          du -sh app/build/ 2>/dev/null || echo "Нет app/build"
-          du -sh */build/ 2>/dev/null | head -10
-      
-      - name: 📦 Загрузка ВСЕГО что собралось
+      # 4. Загрузка результатов
+      - name: 📦 Загрузка артефактов
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: build-outputs
+          name: android-build
           path: |
             app/build/outputs/
-            **/build/outputs/
             **/*.apk
-            **/*.aar
           if-no-files-found: warn
