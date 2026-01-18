@@ -6,48 +6,62 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Create app files
+    - name: Create project
       run: |
+        # 1. App file
         mkdir -p app
-        echo 'plugins {
-        id("com.android.application")
-        id("org.jetbrains.kotlin.android")
-        }
-        android {
-        compileSdk = 34
-        defaultConfig {
-          applicationId = "com.test.app"
-          minSdk = 24
-          targetSdk = 34
-          }
-          buildTypes {
-            debug {
-              isMinifyEnabled = false
-        }
-        }
-        }
-        dependencies {
-        implementation("androidx.core:core-ktx:1.12.0")
-        }' > app/build.gradle.kts
+        echo 'plugins { id("com.android.application") id("org.jetbrains.kotlin.android") }
+android { 
+  compileSdk = 34
+  defaultConfig { 
+    applicationId = "com.test.app" 
+    minSdk = 24 
+    targetSdk = 34 
+  } 
+  buildTypes { 
+    debug { isMinifyEnabled = false } 
+  } 
+}
+dependencies { 
+  implementation("androidx.core:core-ktx:1.12.0") 
+}' > app/build.gradle.kts
         
+        # 2. Settings file - ОБЯЗАТЕЛЬНО с google()
         echo 'pluginManagement {
-        repositories {
-        google()
-        mavenCentral()
-        }
-        }
-        include(":app")' > settings.gradle.kts
+  repositories {
+    google()
+    mavenCentral()
+    gradlePluginPortal()
+  }
+}
+dependencyResolutionManagement {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+include(":app")' > settings.gradle.kts
         
-            echo '' > build.gradle.kts
+        # 3. Root file - пустой
+        echo '' > build.gradle.kts
+        
+        echo "Files created"
     
-    - name: Build
+    - name: Setup Gradle
       run: |
-        sudo apt install -y openjdk-17-jdk
-        gradle wrapper --gradle-version 8.5
+        # Force Gradle 7.5 (stable)
+        gradle wrapper --gradle-version 7.5 --distribution-type bin
         chmod +x gradlew
-        ./gradlew :app:assembleDebug --stacktrace
     
-    - name: Upload APK
+    - name: Install Java
+      run: sudo apt install -y openjdk-11-jdk
+    
+    - name: Build APK
+      run: |
+        echo "Building..."
+        ./gradlew :app:assembleDebug --stacktrace --no-daemon
+    
+    - name: Upload
       uses: actions/upload-artifact@v4
       with:
         name: apk
