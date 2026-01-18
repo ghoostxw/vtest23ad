@@ -9,9 +9,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    container:
-      image: golang:1.24
-
     env:
       ANDROID_SDK_ROOT: /sdk
       JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
@@ -52,25 +49,25 @@ jobs:
 
           yes | sdkmanager --licenses
 
-      - name: Install gomobile
+      - name: Show Gradle configuration
         run: |
-          set -e
-          go version
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          gomobile init
+          echo "===== ROOT FILES ====="
+          ls -la
 
-      - name: Build native core
+          echo "===== settings.gradle(.kts) ====="
+          if [ -f settings.gradle.kts ]; then cat settings.gradle.kts; fi
+          if [ -f settings.gradle ]; then cat settings.gradle; fi
+
+          echo "===== GRADLE PROJECTS ====="
+          gradle projects
+
+      - name: Build ALL debug APKs
         run: |
-          chmod +x ./scripts/build_native.sh
-          ./scripts/build_native.sh
+          gradle assembleDebug --no-daemon
 
-      - name: Build APK
-        run: |
-          gradle :app:assembleDebug --no-daemon
-
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: debug-apks
+          path: |
+            **/build/outputs/apk/debug/*.apk
