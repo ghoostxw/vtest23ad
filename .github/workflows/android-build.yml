@@ -5,41 +5,38 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-env:
-  JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-  ANDROID_SDK_ROOT: /home/runner/Android/Sdk
-  GOPATH: /home/runner/go
-
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    container:
+      image: golang:1.24
+
+    env:
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      ANDROID_SDK_ROOT: /sdk
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.12'
-
-      - name: Install Android commandline tools and SDK packages
+      - name: Install system deps
         run: |
-          set -e
-          mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools"
-          cd $HOME
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d "${ANDROID_SDK_ROOT}/cmdline-tools"
-          if [ -d "${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools" ]; then
-            mv "${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools" "${ANDROID_SDK_ROOT}/cmdline-tools/latest"
-          fi
-          export PATH="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}"
+          apt-get update
+          apt-get install -y \
+            openjdk-17-jdk \
+            unzip \
+            wget \
+            git
+
+      - name: Install Android SDK
+        run: |
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip commandlinetools-linux-9477386_latest.zip
+          mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
           yes | sdkmanager --install \
             "platform-tools" \
             "platforms;android-33" \
@@ -47,19 +44,13 @@ jobs:
             "ndk;25.2.9519653"
           yes | sdkmanager --licenses
 
-      # gomobile install — CORRECT for Go 1.23
       - name: Install gomobile
         run: |
-          set -e
           go version
-          export PATH="$GOPATH/bin:$PATH"
-
-          go install golang.org/x/mobile/cmd/gomobile
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          export PATH="$(go env GOPATH)/bin:$PATH"
           gomobile init
           gomobile version
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
 
       - name: Build native core
         run: |
@@ -67,7 +58,9 @@ jobs:
           ./scripts/build_native.sh
 
       - name: Build APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
