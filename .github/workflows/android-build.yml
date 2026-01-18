@@ -1,4 +1,4 @@
-name: Android CI - Build APK
+name: Сборка Android APK
 
 on:
   push:
@@ -8,105 +8,77 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        java: [ '21' ]
-        android-build-tools: [ '34.0.0' ]
-        android-platform: [ 'android-34' ]
-    
+
     steps:
-      - name: Checkout repository
+      # 1. Клонирование репозитория
+      - name: Клонирование репозитория
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 0
 
-      - name: Set up JDK
+      # 2. Установка JDK 21
+      - name: Установка JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ matrix.java }}
+          java-version: '21'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
+      # 3. Установка Android SDK (исправленная версия)
+      - name: Установка Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: |
             platform-tools
-            platforms;${{ matrix.android-platform }}
-            build-tools;${{ matrix.android-build-tools }}
+            platforms;android-34
+            build-tools;34.0.0
             cmdline-tools;latest
-          ndk-version: '26.1.10909125'
+          accept-android-sdk-licenses: true
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
-          cache-dependency-path: core/go/go.sum
-
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: aarch64-linux-android
-          override: true
-
-      - name: Install Android NDK for Rust
-        run: |
-          echo "Installing Android NDK..."
-          $ANDROID_HOME/ndk/26.1.10909125/build/tools/make_standalone_toolchain.py \
-            --arch arm64 \
-            --api 24 \
-            --install-dir /tmp/android-toolchain
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-
-      - name: Generate gradlew if missing
+      # 4. Создание gradlew если его нет
+      - name: Проверка и создание gradlew
+        id: gradle_check
         run: |
           if [ ! -f "./gradlew" ]; then
-            echo "Generating gradlew wrapper..."
+            echo "gradlew отсутствует, создаю..."
             gradle wrapper --gradle-version 8.5
+          else
+            echo "gradlew найден, даю права на выполнение..."
           fi
-          chmod +x ./gradlew
+          chmod +x ./gradlew || true
+          
+          # Выводим информацию о проекте
+          echo "Проверка структуры проекта..."
+          find . -name "*.gradle*" -o -name "*.kts" | head -10
+          ./gradlew projects --no-daemon 2>&1 | head -50 || echo "Не удалось получить список проектов"
 
-      - name: Build native components (Go)
-        working-directory: ./core/go
+      # 5. Сборка APK
+      - name: Сборка APK (Debug)
         run: |
-          echo "Building Go components..."
-          go mod download
-          # Добавьте здесь команды сборки Go, если они есть в README.md
-
-      - name: Build native components (Rust)
-        working-directory: ./rust
-        run: |
-          echo "Building Rust components..."
-          # Настройка переменных окружения для кросс-компиляции
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="/tmp/android-toolchain/bin/aarch64-linux-android-clang"
-          cargo build --target aarch64-linux-android --release
-
-      - name: Build with Gradle
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
-          JAVA_HOME: ${{ env.JAVA_HOME_21_X64 }}
-        run: |
-          echo "Building Android APK..."
+          echo "Начинаем сборку..."
           ./gradlew :app:assembleDebug \
             --no-daemon \
             --stacktrace \
-            --info
+            --info \
+            -Pandroid.injected.testOnly=false
 
-      - name: Upload APK artifacts
+      # 6. Загрузка APK (исправленный путь)
+      - name: Загрузка APK-артефактов
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apks
-          path: '**/app/build/outputs/apk/debug/*.apk'
+          name: apk-debug
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            */build/outputs/apk/debug/*.apk
+          retention-days: 7
           if-no-files-found: error
 
-      - name: Upload build logs
+      # 7. Сохранение логов ТОЛЬКО при ошибке (опционально)
+      - name: Сохранение логов при ошибке сборки
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
-            **/build/reports/**
-            **/build/outputs/logs/**
+            **/build/reports/
+            .gradle/
+          if-no-files-found: ignore
